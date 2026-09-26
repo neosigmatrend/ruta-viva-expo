@@ -1,0 +1,111 @@
+export type EstadoRuta = 'borrador' | 'en_curso' | 'pausada' | 'finalizada'
+
+export type CategoriaGasto =
+  | 'peaje'
+  | 'bencina'
+  | 'comida'
+  | 'alojamiento'
+  | 'taller'
+  | 'otro'
+
+export interface GeoPoint {
+  nombre: string
+  lat: number
+  lng: number
+}
+
+export interface Costos {
+  peaje: number
+  bencina: number
+  comida: number
+  alojamiento: number
+  taller: number
+  otro: number
+  total: number
+}
+
+export interface Tiempos {
+  totalSeg: number
+  movimientoSeg: number
+  pausasSeg: number
+}
+
+export interface Pausa {
+  id: string
+  inicio: string
+  fin: string | null
+  lat: number
+  lng: number
+}
+
+export interface TrackPoint {
+  t: string
+  lat: number
+  lng: number
+  velKmh: number
+}
+
+export interface Gasto {
+  id: string
+  categoria: CategoriaGasto
+  monto: number
+  nombre: string
+  lat: number
+  lng: number
+  fotoUri: string | null
+  peajeId: string | null
+  automatico: boolean
+  creadoEn: string
+}
+
+export interface PeajeCatalogo {
+  id: string
+  nombre: string
+  lat: number
+  lng: number
+  radioMetros: number
+  tarifaMotoNormal: number
+  tipo: 'tag' | 'plaza' | 'free_flow'
+}
+
+export interface Ruta {
+  id: string
+  nombre: string
+  estado: EstadoRuta
+  creadaEn: string
+  iniciadaEn: string | null
+  finalizadaEn: string | null
+  origen: GeoPoint | null
+  destino: GeoPoint | null
+  radioLlegadaMetros: number
+  tiempos: Tiempos
+  costos: Costos
+  pausas: Pausa[]
+  track: TrackPoint[]
+  gastos: Gasto[]
+}
+
+export const costosVacios = (): Costos => ({
+  peaje: 0,
+  bencina: 0,
+  comida: 0,
+  alojamiento: 0,
+  taller: 0,
+  otro: 0,
+  total: 0,
+})
+
+export const tiemposVacios = (): Tiempos => ({
+  totalSeg: 0,
+  movimientoSeg: 0,
+  pausasSeg: 0,
+})
+
+export function recalcularCostos(gastos: Gasto[]): Costos {
+  const c = costosVacios()
+  for (const g of gastos) {
+    c[g.categoria] += g.monto
+    c.total += g.monto
+  }
+  return c
+}
