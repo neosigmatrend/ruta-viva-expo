@@ -103,6 +103,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
 
   const peajesActivos = useMemo(() => {
     if (!ruta) return [] as typeof PEAJES_CATALOGO
+    // Nunca el catálogo completo: tumba Expo Go y cobraba peajes de más.
     if (ruta.peajeIdsRuta?.length) {
       const ids = new Set(ruta.peajeIdsRuta)
       return PEAJES_CATALOGO.filter((p) => ids.has(p.id))
@@ -110,7 +111,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     if (rutaSugerida.length > 0) {
       return peajesEnRuta(PEAJES_CATALOGO, rutaSugerida)
     }
-    return PEAJES_CATALOGO
+    return []
   }, [ruta, rutaSugerida])
 
   // Evita que iOS apague la pantalla (~1 min) y mate Expo Go / el tunnel
@@ -210,10 +211,11 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       let next = r
       let changed = false
 
-      const lista =
-        r.peajeIdsRuta?.length
-          ? PEAJES_CATALOGO.filter((p) => r.peajeIdsRuta!.includes(p.id))
-          : PEAJES_CATALOGO
+      const lista = r.peajeIdsRuta?.length
+        ? PEAJES_CATALOGO.filter((p) => r.peajeIdsRuta!.includes(p.id))
+        : rutaSugeridaRef.current.length
+          ? peajesEnRuta(PEAJES_CATALOGO, rutaSugeridaRef.current)
+          : []
 
       for (const peaje of lista) {
         const d = distanciaMetros(lat, lng, peaje.lat, peaje.lng)
@@ -440,9 +442,10 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   }
 
   const pedirSalir = () => {
+    // Android admite máx. 3 botones en Alert.
     Alert.alert(
       'Salir de la ruta',
-      'Podés dejarla pendiente y retomarla después desde Inicio (Continuar), finalizarla, o descartarla.',
+      'La ruta queda pendiente y la retomás desde Inicio. También podés finalizarla ahora.',
       [
         { text: 'Seguir aquí', style: 'cancel' },
         {
@@ -452,11 +455,6 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         {
           text: 'Finalizar',
           onPress: () => void finalizar(),
-        },
-        {
-          text: 'Descartar',
-          style: 'destructive',
-          onPress: () => void descartar(),
         },
       ],
     )

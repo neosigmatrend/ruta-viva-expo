@@ -10,7 +10,12 @@ import {
 } from 'react-native'
 import { useFocusEffect } from '../lib/useFocusEffect'
 import { sentidoDeRuta, type Ruta } from '../models/types'
-import { deleteRutas, getRutaActiva, listRutas, saveRuta } from '../lib/storage'
+import {
+  deleteRutas,
+  finalizarRuta,
+  getRutaActiva,
+  listRutas,
+} from '../lib/storage'
 import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
 
@@ -97,12 +102,28 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.6.1 · ruta pendiente</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.2 · pendiente OK</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable
         style={[styles.btnPrimary, seleccionando && styles.btnDisabled]}
-        onPress={onNueva}
+        onPress={() => {
+          if (activa) {
+            Alert.alert(
+              'Hay una ruta pendiente',
+              'Terminá o descartá la pendiente antes de armar otra.',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Ir a pendiente',
+                  onPress: () => onContinuar(activa.id),
+                },
+              ],
+            )
+            return
+          }
+          onNueva()
+        }}
         disabled={seleccionando}
       >
         <Text style={styles.btnPrimaryText}>Nueva ruta</Text>
@@ -112,7 +133,8 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Ruta pendiente</Text>
           <Text style={styles.cardHint}>
-            Si salís de la app, acá la retomás. Tocá Continuar o descartala.
+            Sirve para retomar si cerraste la app a mitad de viaje. No es
+            historial: o un viaje que sigue abierto.
           </Text>
           <View style={styles.rowTop}>
             <Text style={styles.cardTitle} numberOfLines={1}>
@@ -135,19 +157,15 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
               style={styles.btnDescartar}
               onPress={() => {
                 Alert.alert(
-                  'Ruta pendiente',
-                  '¿Finalizar y guardar en historial, o descartar?',
+                  'Cerrar ruta pendiente',
+                  'Finalizar la guarda en historial. Descartar la borra.',
                   [
                     { text: 'Cancelar', style: 'cancel' },
                     {
                       text: 'Finalizar',
                       onPress: () =>
                         void (async () => {
-                          await saveRuta({
-                            ...activa,
-                            estado: 'finalizada',
-                            finalizadaEn: new Date().toISOString(),
-                          })
+                          await finalizarRuta(activa.id)
                           await load()
                         })(),
                     },
