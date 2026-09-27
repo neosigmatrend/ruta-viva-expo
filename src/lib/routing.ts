@@ -11,30 +11,98 @@ export type RutaOpcion = {
   durationSeg: number
 }
 
-const OSRM =
-  'https://router.project-osrm.org/route/v1/driving/'
+const OSRM = 'https://router.project-osrm.org/route/v1/driving/'
 
-function parseOsrmRoutes(json: {
-  code?: string
-  routes?: {
+/** Corredores urbanos forzados cuando OSRM no entrega alternativas (viajes largos al norte). */
+const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
+  {
+    id: 'norte_tunel_vespucio',
+    label: 'Túnel + Vespucio Norte',
+    vias: [
+      { latitude: -33.3988, longitude: -70.6151 }, // Túnel / El Salto
+      { latitude: -33.3658, longitude: -70.6951 }, // Empalme Ruta 5
+    ],
+  },
+  {
+    id: 'norte_central',
+    label: 'Autopista Central',
+    vias: [
+      { latitude: -33.42, longitude: -70.68 },
+      { latitude: -33.28, longitude: -70.735 }, // Central norte
+    ],
+  },
+  {
+    id: 'norte_nororiente',
+    label: 'Acceso Nororiente',
+    vias: [
+      { latitude: -33.36, longitude: -70.58 },
+      { latitude: -33.2, longitude: -70.7 }, // Colina / 5 Norte
+    ],
+  },
+]
+
+function enSantiagoMetro(p: LatLng): boolean {
+  return (
+    p.latitude < -33.2 &&
+    p.latitude > -33.75 &&
+    p.longitude > -71.0 &&
+    p.longitude < -70.4
+  )
+}
+
+/** Destino claramente al norte (sale de la RM hacia el norte). */
+function viajeAlNorte(from: LatLng, to: LatLng): boolean {
+  if (!enSantiagoMetro(from)) return false
+  // Copiapó / La Serena / etc., o al menos ~20 km al norte
+  return to.latitude > -33.05 || to.latitude - from.latitude > 0.18
+}
+
+function coordsFromGeometry(geometry: {
+  coordinates: [number, number][]
+}): LatLng[] {
+  return geometry.coordinates.map(([lng, lat]) => ({
+    latitude: lat,
+    longitude: lng,
+  }))
+}
+
+async function osrmRoute(
+  points: LatLng[],
+  alternatives = 0,
+): Promise<
+  {
     distance: number
     duration: number
     geometry: { coordinates: [number, number][] }
   }[]
-}): RutaOpcion[] {
-  if (json.code !== 'Ok' || !json.routes?.length) {
-    throw new Error('No hay ruta vial entre esos puntos')
+> {
+  const path = points.map((p) => `${p.longitude},${p.latitude}`).join(';')
+  const altParam =
+    alternatives > 0 ? `&alternatives=${alternatives}` : '&alternatives=false'
+  const url = `${OSRM}${path}?overview=full&geometries=geojson${altParam}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Ruta HTTP ${res.status}`)
+  const json = (await res.json()) as {
+    code?: string
+    message?: string
+    routes?: {
+      distance: number
+      duration: number
+      geometry: { coordinates: [number, number][] }
+    }[]
   }
-  return json.routes.map((route, i) => ({
-    id: `alt_${i}`,
-    label: i === 0 ? 'Ruta principal' : `Alternativa ${i}`,
-    coords: route.geometry.coordinates.map(([lng, lat]) => ({
-      latitude: lat,
-      longitude: lng,
-    })),
-    distanceM: route.distance,
-    durationSeg: Math.round(route.duration),
-  }))
+  if (json.code !== 'Ok' || !json.routes?.length) {
+    throw new Error(json.message || 'No hay ruta vial entre esos puntos')
+  }
+  return json.routes
+}
+
+/** Casi la misma ruta (solo para descartar duplicados obvios). */
+function casiIguales(a: RutaOpcion, b: RutaOpcion): boolean {
+  const dDist = Math.abs(a.distanceM - b.distanceM) / Math.max(a.distanceM, 1)
+  const dDur =
+    Math.abs(a.durationSeg - b.durationSeg) / Math.max(a.durationSeg, 1)
+  return dDist < 0.004 && dDur < 0.004
 }
 
 /** Una ruta (compat). */
@@ -50,29 +118,65 @@ export async function fetchRutaDriving(
   }
 }
 
-/** Hasta `maxAlternatives` trazados OSRM (incluye la principal). */
+/**
+ * Propone rutas: alternativas nativas OSRM +, si vas al norte desde Santiago,
+ * corredores urbanos (túnel/Vespucio, Central, Nororiente) con waypoints.
+ */
 export async function fetchRutasDriving(
   from: LatLng,
   to: LatLng,
   maxAlternatives = 3,
 ): Promise<RutaOpcion[]> {
-  const alts = Math.max(0, maxAlternatives - 1)
-  const url =
-    `${OSRM}` +
-    `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
-    `?overview=full&geometries=geojson&alternatives=${alts > 0 ? alts : false}`
+  const out: RutaOpcion[] = []
+  const alNorte = viajeAlNorte(from, to)
 
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Ruta HTTP ${res.status}`)
-  const json = (await res.json()) as {
-    code?: string
-    routes?: {
-      distance: number
-      duration: number
-      geometry: { coordinates: [number, number][] }
-    }[]
+  // Al norte: primero corredores con nombre (OSRM largo casi no da alternativas).
+  if (alNorte) {
+    const settled = await Promise.allSettled(
+      CORREDORES_NORTE.map(async (c) => {
+        const routes = await osrmRoute([from, ...c.vias, to], 0)
+        const route = routes[0]
+        return {
+          id: c.id,
+          label: c.label,
+          coords: coordsFromGeometry(route.geometry),
+          distanceM: route.distance,
+          durationSeg: Math.round(route.duration),
+        } satisfies RutaOpcion
+      }),
+    )
+    for (const s of settled) {
+      if (s.status !== 'fulfilled') continue
+      const cand = s.value
+      if (out.some((o) => casiIguales(o, cand))) continue
+      out.push(cand)
+    }
   }
-  return parseOsrmRoutes(json)
+
+  const nativeAlts = alNorte ? 0 : Math.max(0, maxAlternatives - 1)
+  try {
+    const routes = await osrmRoute([from, to], nativeAlts)
+    routes.forEach((route, i) => {
+      const cand: RutaOpcion = {
+        id: `osrm_${i}`,
+        label: i === 0 ? 'Ruta sugerida' : `Alternativa ${i}`,
+        coords: coordsFromGeometry(route.geometry),
+        distanceM: route.distance,
+        durationSeg: Math.round(route.duration),
+      }
+      // No duplicar la sugerencia OSRM si ya es un corredor norte.
+      if (out.some((o) => casiIguales(o, cand))) return
+      out.push(cand)
+    })
+  } catch (e) {
+    if (out.length === 0) throw e
+  }
+
+  if (out.length === 0) {
+    throw new Error('No hay ruta vial entre esos puntos')
+  }
+
+  return out.slice(0, alNorte ? 4 : Math.max(maxAlternatives, 3))
 }
 
 /** Distancia mínima del punto a cualquier vértice del polyline (aprox.). */
