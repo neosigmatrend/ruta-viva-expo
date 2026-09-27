@@ -41,7 +41,9 @@ type Props = {
   onHome: () => void
 }
 
-type Pos = { lat: number; lng: number; velKmh: number }
+type Pos = { lat: number; lng: number; velKmh: number; heading?: number }
+
+const CASCO = require('../../assets/casco-moto-marker.png')
 
 const CATS: Exclude<CategoriaGasto, 'peaje'>[] = [
   'bencina',
@@ -283,7 +285,11 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           const lng = loc.coords.longitude
           const gpsVel = Math.max(0, (loc.coords.speed ?? 0) * 3.6)
           const velKmh = simVel ?? gpsVel
-          setPos({ lat, lng, velKmh })
+          const heading =
+            loc.coords.heading != null && loc.coords.heading >= 0
+              ? loc.coords.heading
+              : undefined
+          setPos({ lat, lng, velKmh, heading })
           const r = rutaRef.current
           if (!r || r.estado !== 'en_curso') return
 
@@ -649,7 +655,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
-        showsUserLocation
+        showsUserLocation={false}
         followsUserLocation={false}
         onPress={toggleChrome}
       >
@@ -694,6 +700,24 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             title="Inicio"
             tappable={false}
           />
+        )}
+        {pos && (
+          <Marker
+            coordinate={{ latitude: pos.lat, longitude: pos.lng }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            rotation={
+              !pausada && vel >= 8
+                ? (pos.heading ?? bearing)
+                : pos.heading ?? 0
+            }
+            flat
+            // true al inicio para que Android pinte el PNG; luego false ahorra batería
+            tracksViewChanges={vel < 3}
+            tappable={false}
+            title="Vos"
+          >
+            <Image source={CASCO} style={styles.casco} />
+          </Marker>
         )}
       </MapView>
 
@@ -945,6 +969,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#000' },
+  casco: { width: 44, height: 44, resizeMode: 'contain' },
   miniHud: {
     position: 'absolute',
     top: 54,

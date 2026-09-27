@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ruta viva",
     "slug": "ruta-viva-expo",
-    "version": "1.6.3",
+    "version": "1.6.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
