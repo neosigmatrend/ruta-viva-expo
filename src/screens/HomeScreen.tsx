@@ -34,7 +34,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
 
   return (
     <View style={styles.page}>
-      <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
+      <Text style={styles.eyebrow}>Chile · moto · Expo Go · v0.1.3</Text>
       <Text style={styles.title}>Ruta viva</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
