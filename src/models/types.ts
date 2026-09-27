@@ -58,14 +58,37 @@ export interface Gasto {
   creadoEn: string
 }
 
+export type AutopistaUrbana =
+  | 'TSAC' // Túnel San Cristóbal
+  | 'AVNO' // Vespucio Norte
+  | 'AVO1'
+  | 'AVSU'
+  | 'SINS'
+  | 'SIOP'
+  | 'ACNO'
+  | 'AVAM'
+
 export interface PeajeCatalogo {
   id: string
+  /** Id interno MOP del punto de cobro, si aplica. */
+  mopId?: number
   nombre: string
+  autopista: AutopistaUrbana
   lat: number
   lng: number
   radioMetros: number
+  /** Tarifa moto 2026 — base fuera de punta (TBFP), CLP. */
   tarifaMotoNormal: number
+  /** Tarifa moto 2026 — punta (TBP), CLP. */
+  tarifaMotoPunta?: number
+  /** Tarifa moto 2026 — saturación (TS), CLP. */
+  tarifaMotoSaturacion?: number
   tipo: 'tag' | 'plaza' | 'free_flow'
+  sentido?: string
+  /** Incluido en estimado urbano Opción A (Ñuñoa → 5 Norte). */
+  opcionA?: boolean
+  fuenteTarifa?: string
+  fuenteCoords?: string
 }
 
 export interface Ruta {

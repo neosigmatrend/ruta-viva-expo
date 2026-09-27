@@ -13,7 +13,10 @@ import {
 } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
-import { PEAJES_DEMO } from '../data/peajes-demo'
+import {
+  PEAJES_CATALOGO,
+  estimadoMotoOpcionANormal,
+} from '../data/peajes-demo'
 import { formatCLP, newId } from '../lib/geo'
 import { saveRuta } from '../lib/storage'
 import {
@@ -36,7 +39,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
   const [busy, setBusy] = useState(false)
   const mapRef = useRef<MapView>(null)
 
-  const est = PEAJES_DEMO.reduce((s, p) => s + p.tarifaMotoNormal, 0)
+  const est = estimadoMotoOpcionANormal()
 
   const fijarDestino = (latitude: number, longitude: number) => {
     Keyboard.dismiss()
@@ -143,7 +146,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
             Cerrá el teclado y tocá el mapa para fijar el pin azul.
           </Text>
           <Text style={styles.muted}>
-            Peajes demo: {PEAJES_DEMO.length} · estimado moto {formatCLP(est)}
+            Opción A urbana (túnel + Vespucio Norte) · estimado moto normal{' '}
+            {formatCLP(est)}
           </Text>
           {destino ? (
             <Text style={styles.ok}>
@@ -167,13 +171,13 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
         onPress={onMapPress}
         moveOnMarkerPress={false}
       >
-        {PEAJES_DEMO.map((p) => (
+        {PEAJES_CATALOGO.map((p) => (
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor="#c45c26"
+            pinColor={p.opcionA ? '#c45c26' : '#8a8175'}
             title={p.nombre}
-            description={formatCLP(p.tarifaMotoNormal)}
+            description={`Moto ${formatCLP(p.tarifaMotoNormal)} · ${p.autopista}`}
             tappable={false}
           />
         ))}

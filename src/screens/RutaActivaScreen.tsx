@@ -16,7 +16,7 @@ import * as Location from 'expo-location'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
 import { useKeepAwake } from 'expo-keep-awake'
-import { PEAJES_DEMO } from '../data/peajes-demo'
+import { PEAJES_CATALOGO } from '../data/peajes-demo'
 import { distanciaMetros, formatCLP, formatDuration, newId } from '../lib/geo'
 import { rumboDesdeTrack, zoomPorVelocidad } from '../lib/mapaVelocidad'
 import { detectarMontoDesdeUri } from '../lib/ocrBoleta'
@@ -187,7 +187,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       let next = r
       let changed = false
 
-      for (const peaje of PEAJES_DEMO) {
+      for (const peaje of PEAJES_CATALOGO) {
         const d = distanciaMetros(lat, lng, peaje.lat, peaje.lng)
         if (d <= peaje.radioMetros && !next.gastos.some((g) => g.peajeId === peaje.id)) {
           const gastos = [
@@ -581,12 +581,13 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         followsUserLocation={false}
         onPress={toggleChrome}
       >
-        {PEAJES_DEMO.map((p) => (
+        {PEAJES_CATALOGO.map((p) => (
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor="#c45c26"
+            pinColor={p.opcionA ? '#c45c26' : '#8a8175'}
             title={p.nombre}
+            description={`Moto ${formatCLP(p.tarifaMotoNormal)}`}
             tappable={false}
           />
         ))}
@@ -711,7 +712,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
                   <Pressable
                     style={styles.debugBtn}
                     onPress={() => {
-                      const pending = PEAJES_DEMO.find(
+                      const pending = PEAJES_CATALOGO.find(
                         (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
                       )
                       if (!pending) return showToast('No quedan peajes')
