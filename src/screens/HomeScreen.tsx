@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native'
-// Alert used for pending-route close options
 import { useFocusEffect } from '../lib/useFocusEffect'
 import { sentidoDeRuta, type Ruta } from '../models/types'
 import { deleteRutas, getRutaActiva, listRutas, saveRuta } from '../lib/storage'
