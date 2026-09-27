@@ -100,6 +100,11 @@ export interface PeajeCatalogo {
   fuenteCoords?: string
 }
 
+export interface RutaCoord {
+  latitude: number
+  longitude: number
+}
+
 export interface Ruta {
   id: string
   nombre: string
@@ -110,6 +115,12 @@ export interface Ruta {
   origen: GeoPoint | null
   destino: GeoPoint | null
   radioLlegadaMetros: number
+  /** Polyline elegida al armar (OSRM). */
+  rutaPlanificada?: RutaCoord[] | null
+  /** Peajes del catálogo asociados al trazado elegido. */
+  peajeIdsRuta?: string[] | null
+  /** Estimado moto (tarifa normal) de esos peajes. */
+  estimadoPeajesMoto?: number | null
   tiempos: Tiempos
   costos: Costos
   pausas: Pausa[]

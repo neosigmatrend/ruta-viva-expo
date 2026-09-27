@@ -23,6 +23,7 @@ import { detectarMontoDesdeUri } from '../lib/ocrBoleta'
 import {
   distanciaARutaMetros,
   fetchRutaDriving,
+  peajesEnRuta,
   type LatLng,
 } from '../lib/routing'
 import { getRuta, saveRuta } from '../lib/storage'
@@ -91,9 +92,25 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       if (r) {
         rutaRef.current = r
         setRuta(r)
+        if (r.rutaPlanificada?.length) {
+          rutaSugeridaRef.current = r.rutaPlanificada
+          setRutaSugerida(r.rutaPlanificada)
+        }
       }
     })
   }, [rutaId])
+
+  const peajesActivos = useMemo(() => {
+    if (!ruta) return [] as typeof PEAJES_CATALOGO
+    if (ruta.peajeIdsRuta?.length) {
+      const ids = new Set(ruta.peajeIdsRuta)
+      return PEAJES_CATALOGO.filter((p) => ids.has(p.id))
+    }
+    if (rutaSugerida.length > 0) {
+      return peajesEnRuta(PEAJES_CATALOGO, rutaSugerida)
+    }
+    return PEAJES_CATALOGO
+  }, [ruta, rutaSugerida])
 
   // Evita que iOS apague la pantalla (~1 min) y mate Expo Go / el tunnel
   useKeepAwake('ruta-viva-activa')
@@ -170,10 +187,15 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     [],
   )
 
-  // Primera ruta: origen → destino
+  // Primera ruta: usa la planificada; si no hay, pide OSRM
   useEffect(() => {
     const r = ruta
     if (!r?.destino) return
+    if (r.rutaPlanificada?.length) {
+      rutaSugeridaRef.current = r.rutaPlanificada
+      setRutaSugerida(r.rutaPlanificada)
+      return
+    }
     const from: LatLng = r.origen
       ? { latitude: r.origen.lat, longitude: r.origen.lng }
       : { latitude: -33.45, longitude: -70.66 }
@@ -187,7 +209,12 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       let next = r
       let changed = false
 
-      for (const peaje of PEAJES_CATALOGO) {
+      const lista =
+        r.peajeIdsRuta?.length
+          ? PEAJES_CATALOGO.filter((p) => r.peajeIdsRuta!.includes(p.id))
+          : PEAJES_CATALOGO
+
+      for (const peaje of lista) {
         const d = distanciaMetros(lat, lng, peaje.lat, peaje.lng)
         if (d <= peaje.radioMetros && !next.gastos.some((g) => g.peajeId === peaje.id)) {
           const gastos = [
@@ -581,11 +608,11 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         followsUserLocation={false}
         onPress={toggleChrome}
       >
-        {PEAJES_CATALOGO.map((p) => (
+        {peajesActivos.map((p) => (
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor={p.viajeCopiapo || p.opcionA ? '#c45c26' : '#8a8175'}
+            pinColor="#c45c26"
             title={p.nombre}
             description={`Moto ${formatCLP(p.tarifaMotoNormal)}`}
             tappable={false}
@@ -712,10 +739,10 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
                   <Pressable
                     style={styles.debugBtn}
                     onPress={() => {
-                      const pending = PEAJES_CATALOGO.find(
+                      const pending = peajesActivos.find(
                         (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
                       )
-                      if (!pending) return showToast('No quedan peajes')
+                      if (!pending) return showToast('No quedan peajes de la ruta')
                       setPos({
                         lat: pending.lat,
                         lng: pending.lng,
