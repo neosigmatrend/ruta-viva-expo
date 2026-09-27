@@ -18,6 +18,7 @@ import {
 } from '../lib/storage'
 import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
+import { SwipeableHistorialRow } from '../components/SwipeableHistorialRow'
 
 type Props = {
   onNueva: () => void
@@ -31,6 +32,8 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
   const [seleccionando, setSeleccionando] = useState(false)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [borrando, setBorrando] = useState(false)
+  /** Fila del historial con swipe abierto (basurero visible). */
+  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const a = await getRutaActiva()
@@ -44,6 +47,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
       void load()
       setSeleccionando(false)
       setSeleccion(new Set())
+      setSwipeOpenId(null)
     }, [load]),
   )
 
@@ -62,6 +66,33 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
   const salirSeleccion = () => {
     setSeleccionando(false)
     setSeleccion(new Set())
+    setSwipeOpenId(null)
+  }
+
+  const confirmarBorrarUna = (id: string, nombre: string) => {
+    Alert.alert('Borrar ruta', `¿Borrar «${nombre}» del historial?`, [
+      {
+        text: 'Cancelar',
+        style: 'cancel',
+        onPress: () => setSwipeOpenId(null),
+      },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: () => void borrarUna(id),
+      },
+    ])
+  }
+
+  const borrarUna = async (id: string) => {
+    setBorrando(true)
+    try {
+      await deleteRutas([id])
+      setSwipeOpenId(null)
+      await load()
+    } finally {
+      setBorrando(false)
+    }
   }
 
   const seleccionarTodo = () => {
@@ -131,7 +162,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.6.4 · casco en mapa</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.5 · swipe borrar</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable
@@ -218,7 +249,10 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
           <Pressable
             onPress={() => {
               if (seleccionando) salirSeleccion()
-              else setSeleccionando(true)
+              else {
+                setSwipeOpenId(null)
+                setSeleccionando(true)
+              }
             }}
           >
             <Text style={styles.link}>
@@ -280,40 +314,53 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
           const fecha = formatFechaCorta(item.finalizadaEn || item.creadaEn)
           const checked = seleccion.has(item.id)
           return (
-            <Pressable
-              style={[styles.row, checked && styles.rowSelected]}
-              onPress={() => {
-                if (seleccionando) toggleSel(item.id)
-                else onResumen(item.id)
-              }}
-              onLongPress={() => {
-                if (!seleccionando) {
-                  setSeleccionando(true)
-                  setSeleccion(new Set([item.id]))
-                }
-              }}
+            <SwipeableHistorialRow
+              rowId={item.id}
+              openId={swipeOpenId}
+              onOpenChange={setSwipeOpenId}
+              disabled={seleccionando || borrando}
+              onDeletePress={() => confirmarBorrarUna(item.id, item.nombre)}
             >
-              <View style={styles.rowTop}>
-                {seleccionando && (
-                  <Text style={styles.check}>{checked ? '☑' : '☐'}</Text>
-                )}
-                <Text
-                  style={[styles.fecha, { color: fechaColor, flex: 1 }]}
-                >
-                  {flecha} {fecha}
+              <Pressable
+                style={[styles.row, checked && styles.rowSelected]}
+                onPress={() => {
+                  if (swipeOpenId === item.id) {
+                    setSwipeOpenId(null)
+                    return
+                  }
+                  if (seleccionando) toggleSel(item.id)
+                  else onResumen(item.id)
+                }}
+                onLongPress={() => {
+                  if (!seleccionando) {
+                    setSwipeOpenId(null)
+                    setSeleccionando(true)
+                    setSeleccion(new Set([item.id]))
+                  }
+                }}
+              >
+                <View style={styles.rowTop}>
+                  {seleccionando && (
+                    <Text style={styles.check}>{checked ? '☑' : '☐'}</Text>
+                  )}
+                  <Text
+                    style={[styles.fecha, { color: fechaColor, flex: 1 }]}
+                  >
+                    {flecha} {fecha}
+                  </Text>
+                  <Text style={[styles.sentidoTag, { color: fechaColor }]}>
+                    {esIda ? 'IDA' : 'VUELTA'}
+                  </Text>
+                </View>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.nombre}
                 </Text>
-                <Text style={[styles.sentidoTag, { color: fechaColor }]}>
-                  {esIda ? 'IDA' : 'VUELTA'}
+                <Text style={styles.muted}>
+                  {formatDuration(item.tiempos.totalSeg)} ·{' '}
+                  {formatCLP(item.costos.total)}
                 </Text>
-              </View>
-              <Text style={styles.cardTitle} numberOfLines={1}>
-                {item.nombre}
-              </Text>
-              <Text style={styles.muted}>
-                {formatDuration(item.tiempos.totalSeg)} ·{' '}
-                {formatCLP(item.costos.total)}
-              </Text>
-            </Pressable>
+              </Pressable>
+            </SwipeableHistorialRow>
           )
         }}
       />
@@ -442,7 +489,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elev,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.line,
   },
