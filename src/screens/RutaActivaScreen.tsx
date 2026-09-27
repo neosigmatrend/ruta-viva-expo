@@ -18,6 +18,7 @@ import { useKeepAwake } from 'expo-keep-awake'
 import { PEAJES_DEMO } from '../data/peajes-demo'
 import { distanciaMetros, formatCLP, formatDuration, newId } from '../lib/geo'
 import { rumboDesdeTrack, zoomPorVelocidad } from '../lib/mapaVelocidad'
+import { detectarMontoDesdeUri } from '../lib/ocrBoleta'
 import { getRuta, saveRuta } from '../lib/storage'
 import {
   recalcularCostos,
@@ -52,6 +53,10 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const [nombreGasto, setNombreGasto] = useState('')
   const [cat, setCat] = useState<Exclude<CategoriaGasto, 'peaje'>>('comida')
   const [fotoUri, setFotoUri] = useState<string | null>(null)
+  const [ocrStatus, setOcrStatus] = useState<'idle' | 'loading' | 'ok' | 'fail'>(
+    'idle',
+  )
+  const [ocrCandidatos, setOcrCandidatos] = useState<number[]>([])
   const rutaRef = useRef<Ruta | null>(null)
   const mapRef = useRef<MapView | null>(null)
   const lastCamAt = useRef(0)
@@ -291,6 +296,24 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     onFinalizada(next.id)
   }
 
+  const correrOcr = async (uri: string) => {
+    setOcrStatus('loading')
+    setOcrCandidatos([])
+    try {
+      const { sugerido, candidatos } = await detectarMontoDesdeUri(uri)
+      setOcrCandidatos(candidatos)
+      if (sugerido != null) {
+        setMonto(String(sugerido))
+        setOcrStatus('ok')
+        showToast(`Detectado ${formatCLP(sugerido)} · confirmá`)
+      } else {
+        setOcrStatus('fail')
+      }
+    } catch {
+      setOcrStatus('fail')
+    }
+  }
+
   const tomarFoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
@@ -298,10 +321,14 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       return
     }
     const res = await ImagePicker.launchCameraAsync({
-      quality: 0.6,
+      quality: 0.55,
       allowsEditing: false,
     })
-    if (!res.canceled && res.assets[0]) setFotoUri(res.assets[0].uri)
+    if (!res.canceled && res.assets[0]) {
+      const uri = res.assets[0].uri
+      setFotoUri(uri)
+      void correrOcr(uri)
+    }
   }
 
   const guardarGasto = async () => {
@@ -332,6 +359,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     setMonto('')
     setNombreGasto('')
     setFotoUri(null)
+    setOcrStatus('idle')
+    setOcrCandidatos([])
   }
 
   const coords = useMemo(
@@ -491,7 +520,47 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         <View style={styles.sheetWrap}>
           <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={styles.title}>Agregar gasto</Text>
-            <Text style={styles.muted}>Solo detenido · foto opcional</Text>
+            <Text style={styles.muted}>
+              Solo detenido · sacá foto y confirmá el monto sugerido
+            </Text>
+            <Pressable style={styles.btnGhost} onPress={() => void tomarFoto()}>
+              <Text style={styles.ghostText}>
+                {ocrStatus === 'loading'
+                  ? 'Leyendo boleta…'
+                  : fotoUri
+                    ? 'Foto lista · cambiar'
+                    : 'Sacar foto boleta'}
+              </Text>
+            </Pressable>
+            {fotoUri && (
+              <Image source={{ uri: fotoUri }} style={styles.foto} />
+            )}
+            {ocrStatus === 'loading' && (
+              <Text style={styles.muted}>Detectando monto (necesita internet)…</Text>
+            )}
+            {ocrStatus === 'ok' && (
+              <Text style={styles.ocrOk}>
+                Monto sugerido: {formatCLP(Number(monto) || 0)}. Confirmá o corregí.
+              </Text>
+            )}
+            {ocrStatus === 'fail' && (
+              <Text style={styles.ocrFail}>
+                No pude leer el monto. Escribilo a mano.
+              </Text>
+            )}
+            {ocrCandidatos.length > 1 && (
+              <View style={styles.debugRow}>
+                {ocrCandidatos.map((c) => (
+                  <Pressable
+                    key={c}
+                    style={styles.debugBtn}
+                    onPress={() => setMonto(String(c))}
+                  >
+                    <Text style={styles.ghostText}>{formatCLP(c)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <View style={styles.debugRow}>
               {CATS.map((c) => (
                 <Pressable
@@ -518,18 +587,17 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
               value={nombreGasto}
               onChangeText={setNombreGasto}
             />
-            <Pressable style={styles.btnGhost} onPress={() => void tomarFoto()}>
-              <Text style={styles.ghostText}>
-                {fotoUri ? 'Foto lista · cambiar' : 'Sacar foto boleta'}
-              </Text>
-            </Pressable>
-            {fotoUri && (
-              <Image source={{ uri: fotoUri }} style={styles.foto} />
-            )}
             <Pressable style={styles.btnPrimary} onPress={() => void guardarGasto()}>
-              <Text style={styles.btnPrimaryText}>Guardar</Text>
+              <Text style={styles.btnPrimaryText}>Confirmar y guardar</Text>
             </Pressable>
-            <Pressable style={styles.btnGhost} onPress={() => setShowGasto(false)}>
+            <Pressable
+              style={styles.btnGhost}
+              onPress={() => {
+                setShowGasto(false)
+                setOcrStatus('idle')
+                setOcrCandidatos([])
+              }}
+            >
               <Text style={styles.ghostText}>Cancelar</Text>
             </Pressable>
           </ScrollView>
@@ -624,4 +692,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   foto: { width: '100%', height: 140, borderRadius: 12, marginTop: 8 },
+  ocrOk: { color: colors.ok, marginTop: 8, fontWeight: '600' },
+  ocrFail: { color: colors.danger, marginTop: 8 },
 })
