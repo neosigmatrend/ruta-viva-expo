@@ -32,19 +32,18 @@ const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
     ],
   },
   {
-    // Criterio del usuario (sin loops en el mapa):
-    // Los Leones → Puente Padre Letelier → Santa María → Costanera Norte
-    // → Salida 9 → Autopista Nororiente → Ruta 5 Norte.
+    // Los Leones → Santa María → Costanera oriente → Salida 9 → Nororiente → R5.
+    // Vias pensadas para no meterse al poniente (Vivaceta / Bellavista).
     id: 'norte_nororiente',
     label: 'Costanera + Autopista Nororiente',
     vias: [
-      { latitude: -33.4257, longitude: -70.604 }, // Los Leones (norte)
-      { latitude: -33.4197, longitude: -70.6115 }, // Puente Padre Letelier
-      { latitude: -33.415, longitude: -70.605 }, // Santa María
-      { latitude: -33.4093, longitude: -70.6058 }, // Costanera Norte oriente
-      { latitude: -33.3888, longitude: -70.6019 }, // Salida 9 → Autopista Nororiente
-      { latitude: -33.3217, longitude: -70.6256 }, // Nororiente / Chamisero
-      { latitude: -33.3001, longitude: -70.7295 }, // Enlace → Ruta 5 Norte
+      { latitude: -33.4257, longitude: -70.604 }, // Los Leones
+      { latitude: -33.4125, longitude: -70.605 }, // Kennedy / Costanera
+      { latitude: -33.3945, longitude: -70.6035 }, // Centenario (P2.2)
+      { latitude: -33.3888, longitude: -70.6019 }, // Salida 9 → Nororiente
+      { latitude: -33.33, longitude: -70.626 }, // Nororiente mid
+      { latitude: -33.305, longitude: -70.66 }, // Nororiente → R5
+      { latitude: -33.285, longitude: -70.735 }, // R5 Norte
     ],
   },
 ]
@@ -224,63 +223,210 @@ export async function fetchRutasDriving(
   return out.slice(0, corredores.length ? 4 : Math.max(maxAlternatives, 3))
 }
 
+function distPuntoASegmentoMetros(p: LatLng, a: LatLng, b: LatLng): number {
+  const midLat = ((a.latitude + b.latitude) / 2) * (Math.PI / 180)
+  const x = (lng: number) => (lng - a.longitude) * Math.cos(midLat) * 111320
+  const y = (lat: number) => (lat - a.latitude) * 110540
+  const ax = 0
+  const ay = 0
+  const bx = x(b.longitude)
+  const by = y(b.latitude)
+  const px = x(p.longitude)
+  const py = y(p.latitude)
+  const dx = bx - ax
+  const dy = by - ay
+  const len2 = dx * dx + dy * dy
+  let t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
 /**
- * Distancia mínima del punto al polyline.
- * Barrido grueso + refinamiento local (evita saltarse pórticos en rutas largas).
+ * Distancia mínima del punto al polyline (a segmentos, no solo vértices).
+ * Barrido grueso + refinamiento local.
  */
 export function distanciaARutaMetros(punto: LatLng, ruta: LatLng[]): number {
   if (ruta.length === 0) return Infinity
-  const coarse = Math.max(1, Math.floor(ruta.length / 80))
-  let min = Infinity
-  let bestIdx = 0
-  for (let i = 0; i < ruta.length; i += coarse) {
-    const p = ruta[i]
-    const d = distanciaMetros(
+  if (ruta.length === 1) {
+    return distanciaMetros(
       punto.latitude,
       punto.longitude,
-      p.latitude,
-      p.longitude,
+      ruta[0].latitude,
+      ruta[0].longitude,
     )
+  }
+  const coarse = Math.max(1, Math.floor(ruta.length / 100))
+  let min = Infinity
+  let bestIdx = 0
+  for (let i = 0; i < ruta.length - 1; i += coarse) {
+    const j = Math.min(i + coarse, ruta.length - 1)
+    const d = distPuntoASegmentoMetros(punto, ruta[i], ruta[j])
     if (d < min) {
       min = d
       bestIdx = i
     }
   }
-  const last = ruta[ruta.length - 1]
-  const dLast = distanciaMetros(
-    punto.latitude,
-    punto.longitude,
-    last.latitude,
-    last.longitude,
-  )
-  if (dLast < min) {
-    min = dLast
-    bestIdx = ruta.length - 1
-  }
-
-  const from = Math.max(0, bestIdx - coarse * 2)
-  const to = Math.min(ruta.length - 1, bestIdx + coarse * 2)
+  const from = Math.max(0, bestIdx - coarse * 3)
+  const to = Math.min(ruta.length - 2, bestIdx + coarse * 3)
   for (let i = from; i <= to; i++) {
-    const p = ruta[i]
-    const d = distanciaMetros(
-      punto.latitude,
-      punto.longitude,
-      p.latitude,
-      p.longitude,
-    )
+    const d = distPuntoASegmentoMetros(punto, ruta[i], ruta[i + 1])
     if (d < min) min = d
   }
   return min
 }
 
+/** Índice del vértice de ruta más cercano al peaje. */
+function indiceCercano(punto: LatLng, ruta: LatLng[]): number {
+  let best = 0
+  let min = Infinity
+  const coarse = Math.max(1, Math.floor(ruta.length / 100))
+  for (let i = 0; i < ruta.length; i += coarse) {
+    const d = distanciaMetros(
+      punto.latitude,
+      punto.longitude,
+      ruta[i].latitude,
+      ruta[i].longitude,
+    )
+    if (d < min) {
+      min = d
+      best = i
+    }
+  }
+  const from = Math.max(0, best - coarse * 3)
+  const to = Math.min(ruta.length - 1, best + coarse * 3)
+  for (let i = from; i <= to; i++) {
+    const d = distanciaMetros(
+      punto.latitude,
+      punto.longitude,
+      ruta[i].latitude,
+      ruta[i].longitude,
+    )
+    if (d < min) {
+      min = d
+      best = i
+    }
+  }
+  return best
+}
+
+type SentidoViaje = 'ascendente' | 'descendente' | 'ambos'
+
 /**
- * Peajes del catálogo cercanos al trazado.
- * Deduplica sentidos opuestos del mismo pórtico (misma ubicación).
+ * Convención MOP en ejes N–S (Ruta 5, Central, Nororiente…):
+ * ascendente = norte→sur; descendente = sur→norte.
+ * En Costanera (SIOP, eje E–O): ascendente = oriente→poniente;
+ * descendente = poniente→oriente.
+ */
+function sentidoViajeEnPunto(
+  autopista: PeajeCatalogo['autopista'],
+  ruta: LatLng[],
+  idx: number,
+): SentidoViaje {
+  const a = ruta[idx]
+  let b = a
+  let acc = 0
+  for (let i = idx + 1; i < ruta.length && acc < 280; i++) {
+    acc += distanciaMetros(
+      b.latitude,
+      b.longitude,
+      ruta[i].latitude,
+      ruta[i].longitude,
+    )
+    b = ruta[i]
+  }
+  if (acc < 40 && idx > 0) {
+    // al final del trazo: mirar hacia atrás e invertir
+    let prev = a
+    let back = 0
+    for (let i = idx - 1; i >= 0 && back < 280; i--) {
+      back += distanciaMetros(
+        prev.latitude,
+        prev.longitude,
+        ruta[i].latitude,
+        ruta[i].longitude,
+      )
+      prev = ruta[i]
+    }
+    const dLat = a.latitude - prev.latitude
+    const dLng = a.longitude - prev.longitude
+    return sentidoDesdeDelta(autopista, dLat, dLng)
+  }
+  const dLat = b.latitude - a.latitude
+  const dLng = b.longitude - a.longitude
+  return sentidoDesdeDelta(autopista, dLat, dLng)
+}
+
+function sentidoDesdeDelta(
+  autopista: PeajeCatalogo['autopista'],
+  dLat: number,
+  dLng: number,
+): SentidoViaje {
+  if (Math.abs(dLat) < 1e-8 && Math.abs(dLng) < 1e-8) return 'ambos'
+
+  // Ejes oriente–poniente (Costanera Norte).
+  if (autopista === 'SIOP') {
+    if (Math.abs(dLng) >= Math.abs(dLat) * 0.35) {
+      return dLng < 0 ? 'ascendente' : 'descendente'
+    }
+    // tramo casi N–S en Costanera oriente: hacia el norte ≈ hacia el oriente de la concesión
+    return dLat > 0 ? 'descendente' : 'ascendente'
+  }
+
+  // Túnel: Kennedy→El Salto es hacia el norte (El Salto).
+  if (autopista === 'TSAC') {
+    return dLat > 0 ? 'ascendente' : 'descendente'
+  }
+
+  // Resto (R5, Central, AVNO, ACNO, AVSU…): N→S = ascendente.
+  if (Math.abs(dLat) >= Math.abs(dLng) * 0.25) {
+    return dLat < 0 ? 'ascendente' : 'descendente'
+  }
+  // tramo más E–O: poniente (↓lng) en Nororiente hacia R5 ≈ ascendente
+  if (autopista === 'ACNO') {
+    return dLng < 0 ? 'ascendente' : 'descendente'
+  }
+  return dLat < 0 ? 'ascendente' : 'descendente'
+}
+
+function etiquetaSentido(s?: string): SentidoViaje {
+  const t = (s || '').toLowerCase()
+  if (!t || t.includes('ambos')) return 'ambos'
+  if (t.includes('descendente')) return 'descendente'
+  if (t.includes('ascendente')) return 'ascendente'
+  // Códigos electrónicos MOP: PP1NS = norte→sur, PP1SN = sur→norte.
+  if (/pp\d*sn/.test(t) || /sur\s*[→\-|].*norte/.test(t)) return 'descendente'
+  if (/pp\d*ns/.test(t) || /norte\s*[→\-|].*sur/.test(t)) return 'ascendente'
+  // Nombres tipo "Kennedy → El Salto" (TSAC).
+  if (t.includes('kennedy') && t.includes('salto')) {
+    return t.indexOf('kennedy') < t.indexOf('salto')
+      ? 'ascendente'
+      : 'descendente'
+  }
+  // Etiquetas cortas N→S / S→N en el nombre mostrado.
+  if (t.includes('n→s') || t.includes('n->s')) return 'ascendente'
+  if (t.includes('s→n') || t.includes('s->n')) return 'descendente'
+  return 'ambos'
+}
+
+function peajeCoincideSentido(
+  peaje: PeajeCatalogo,
+  viaje: SentidoViaje,
+): boolean {
+  const peajeSentido = etiquetaSentido(
+    `${peaje.sentido || ''} ${peaje.nombre || ''}`,
+  )
+  if (viaje === 'ambos' || peajeSentido === 'ambos') return true
+  return peajeSentido === viaje
+}
+
+/**
+ * Peajes del catálogo cercanos al trazado, solo en el sentido del viaje.
+ * Deduplica pórticos opuestos / plaza+electrónico en la misma celda.
  */
 export function peajesEnRuta(
   catalogo: PeajeCatalogo[],
   ruta: LatLng[],
-  margenExtraM = 140,
+  margenExtraM = 90,
 ): PeajeCatalogo[] {
   if (ruta.length === 0) return []
   const hits = catalogo.filter((p) => {
@@ -288,10 +434,13 @@ export function peajesEnRuta(
       { latitude: p.lat, longitude: p.lng },
       ruta,
     )
-    return d <= p.radioMetros + margenExtraM
+    if (d > p.radioMetros + margenExtraM) return false
+    const idx = indiceCercano({ latitude: p.lat, longitude: p.lng }, ruta)
+    const viaje = sentidoViajeEnPunto(p.autopista, ruta, idx)
+    return peajeCoincideSentido(p, viaje)
   })
 
-  // Una entrada por celda ~55 m (evita cobro doble ascendente/descendente).
+  // Una entrada por celda ~110 m (evita cobro doble plaza/electrónico u opuestos).
   const byCell = new Map<string, PeajeCatalogo>()
   for (const p of hits) {
     const key = `${p.autopista}:${p.lat.toFixed(3)},${p.lng.toFixed(3)}`
@@ -300,14 +449,18 @@ export function peajesEnRuta(
       byCell.set(key, p)
       continue
     }
-    // Preferir sentido ascendente / nombre más corto si hay duplicado.
-    const prevPenal =
-      (prev.sentido?.toLowerCase().includes('descendente') ? 1 : 0) +
-      prev.nombre.length / 1000
-    const nextPenal =
-      (p.sentido?.toLowerCase().includes('descendente') ? 1 : 0) +
-      p.nombre.length / 1000
-    if (nextPenal < prevPenal) byCell.set(key, p)
+    // Preferir free_flow con sentido explícito y nombre corto/legible.
+    const score = (x: PeajeCatalogo) => {
+      const s = (x.sentido || '').toLowerCase()
+      let n = 0
+      if (x.tipo === 'free_flow') n += 2
+      if (s.includes('ascendente') || s.includes('descendente')) n += 2
+      if (s.includes('ambos')) n += 1
+      if (!/pp\d|rdm-|pórtico troncal/i.test(x.nombre)) n += 1
+      n -= x.nombre.length / 500
+      return n
+    }
+    if (score(p) > score(prev)) byCell.set(key, p)
   }
   return [...byCell.values()]
 }
