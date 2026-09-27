@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ruta viva",
     "slug": "ruta-viva-expo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,10 +15,11 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Ruta viva usa tu ubicación para el mapa, peajes y llegada al destino.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ruta viva usa tu ubicación durante la ruta en curso.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ruta viva sigue la ruta aunque bloquees la pantalla un momento.",
         "NSCameraUsageDescription": "Para foto de boletas de gastos.",
         "NSPhotoLibraryUsageDescription": "Para adjuntar foto de boletas.",
-        "NSMicrophoneUsageDescription": "Para tips de voz en pausa."
+        "NSMicrophoneUsageDescription": "Para tips de voz en pausa.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -31,8 +32,11 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -42,7 +46,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Permitir ubicación para mapa, peajes y destino."
+          "locationWhenInUsePermission": "Permitir ubicación para mapa, peajes y destino.",
+          "locationAlwaysAndWhenInUsePermission": "Permitir ubicación durante la ruta en curso.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [

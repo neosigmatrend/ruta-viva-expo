@@ -93,7 +93,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
         finalizadaEn: null,
         origen,
         destino: { ...destino, nombre: destLabel.trim() || destino.nombre },
-        radioLlegadaMetros: 200,
+        radioLlegadaMetros: 300,
         tiempos: tiemposVacios(),
         costos: costosVacios(),
         pausas: [],

@@ -9,10 +9,12 @@ import {
   Modal,
   Image,
   ScrollView,
+  AppState,
 } from 'react-native'
 import MapView, { Marker, Polyline } from 'react-native-maps'
 import * as Location from 'expo-location'
 import * as ImagePicker from 'expo-image-picker'
+import { useKeepAwake } from 'expo-keep-awake'
 import { PEAJES_DEMO } from '../data/peajes-demo'
 import { distanciaMetros, formatCLP, formatDuration, newId } from '../lib/geo'
 import { rumboDesdeTrack, zoomPorVelocidad } from '../lib/mapaVelocidad'
@@ -52,6 +54,9 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const [fotoUri, setFotoUri] = useState<string | null>(null)
   const rutaRef = useRef<Ruta | null>(null)
   const mapRef = useRef<MapView | null>(null)
+  const lastCamAt = useRef(0)
+  const lastPersistTrackAt = useRef(0)
+  const [uiTick, setUiTick] = useState(0)
 
   const persist = useCallback(async (next: Ruta) => {
     rutaRef.current = next
@@ -68,27 +73,43 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     })
   }, [rutaId])
 
+  // Evita que iOS apague la pantalla (~1 min) y mate Expo Go / el tunnel
+  useKeepAwake('ruta-viva-activa')
+
   useEffect(() => {
-    const id = setInterval(() => {
-      const r = rutaRef.current
-      if (!r?.iniciadaEn || r.estado === 'finalizada') return
-      const now = Date.now()
-      const totalSeg = Math.floor((now - new Date(r.iniciadaEn).getTime()) / 1000)
-      const pausasSeg = r.pausas.reduce((acc, p) => {
-        const fin = p.fin ? new Date(p.fin).getTime() : now
-        return acc + Math.floor((fin - new Date(p.inicio).getTime()) / 1000)
-      }, 0)
-      void persist({
-        ...r,
-        tiempos: {
-          totalSeg,
-          pausasSeg,
-          movimientoSeg: Math.max(0, totalSeg - pausasSeg),
-        },
-      })
-    }, 1000)
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') {
+        const r = rutaRef.current
+        if (r && r.estado !== 'finalizada') {
+          void saveRuta(r)
+        }
+      }
+    })
+    return () => sub.remove()
+  }, [])
+
+  // Solo refresca el reloj en UI; no escribe AsyncStorage cada segundo
+  useEffect(() => {
+    const id = setInterval(() => setUiTick((t) => t + 1), 1000)
     return () => clearInterval(id)
-  }, [persist])
+  }, [])
+
+  const tiemposLive = useMemo(() => {
+    const r = ruta
+    if (!r?.iniciadaEn) return r?.tiempos
+    void uiTick
+    const now = Date.now()
+    const totalSeg = Math.floor((now - new Date(r.iniciadaEn).getTime()) / 1000)
+    const pausasSeg = r.pausas.reduce((acc, p) => {
+      const fin = p.fin ? new Date(p.fin).getTime() : now
+      return acc + Math.floor((fin - new Date(p.inicio).getTime()) / 1000)
+    }, 0)
+    return {
+      totalSeg,
+      pausasSeg,
+      movimientoSeg: Math.max(0, totalSeg - pausasSeg),
+    }
+  }, [ruta, uiTick])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -147,13 +168,20 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null
     ;(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') return
+      const fg = await Location.requestForegroundPermissionsAsync()
+      if (fg.status !== 'granted') return
+      // En Expo Go el background es limitado; igual pedimos permiso
+      try {
+        await Location.requestBackgroundPermissionsAsync()
+      } catch {
+        /* ignore */
+      }
       sub = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 2000,
-          distanceInterval: 5,
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 3000,
+          distanceInterval: 12,
+          mayShowUserSettingsDialog: true,
         },
         (loc) => {
           const lat = loc.coords.latitude
@@ -163,18 +191,31 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           setPos({ lat, lng, velKmh })
           const r = rutaRef.current
           if (!r || r.estado !== 'en_curso') return
-          const track = [
-            ...r.track,
-            { t: new Date().toISOString(), lat, lng, velKmh },
-          ].slice(-2000)
-          void persist({ ...r, track }).then(() => maybePeajeYDestino(lat, lng))
+
+          const now = Date.now()
+          const trackPoint = {
+            t: new Date().toISOString(),
+            lat,
+            lng,
+            velKmh,
+          }
+          // Actualiza memoria siempre; persiste a disco como máximo cada 8s
+          const track = [...r.track, trackPoint].slice(-1500)
+          const next = { ...r, track }
+          rutaRef.current = next
+          setRuta(next)
+          void maybePeajeYDestino(lat, lng)
+          if (now - lastPersistTrackAt.current > 8000) {
+            lastPersistTrackAt.current = now
+            void saveRuta(next)
+          }
         },
       )
     })()
     return () => {
       sub?.remove()
     }
-  }, [maybePeajeYDestino, persist, simVel])
+  }, [maybePeajeYDestino, simVel])
 
   const vel = simVel ?? pos?.velKmh ?? 0
   const pausada = ruta?.estado === 'pausada'
@@ -184,16 +225,9 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
 
   useEffect(() => {
     if (!pos || !mapRef.current) return
-    mapRef.current.animateCamera(
-      {
-        center: { latitude: pos.lat, longitude: pos.lng },
-        heading: bearing,
-        pitch: !pausada && vel >= 35 ? 45 : 0,
-        altitude: undefined,
-        zoom: undefined,
-      },
-      { duration: 500 },
-    )
+    const now = Date.now()
+    if (now - lastCamAt.current < 2500) return
+    lastCamAt.current = now
     mapRef.current.animateToRegion(
       {
         latitude: pos.lat,
@@ -201,7 +235,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         latitudeDelta: latDelta,
         longitudeDelta: latDelta,
       },
-      500,
+      700,
     )
   }, [pos?.lat, pos?.lng, latDelta, bearing, pausada, vel])
 
@@ -249,6 +283,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     const next = {
       ...r,
       pausas,
+      tiempos: tiemposLive ?? r.tiempos,
       estado: 'finalizada' as const,
       finalizadaEn: new Date().toISOString(),
     }
@@ -324,7 +359,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       <View style={styles.hud}>
         <Text style={styles.title}>{ruta.nombre}</Text>
         <Text style={styles.muted}>
-          {pausada ? 'Pausada' : 'En curso'} · {formatDuration(ruta.tiempos.totalSeg)} ·{' '}
+          {pausada ? 'Pausada' : 'En curso'} ·{' '}
+          {formatDuration(tiemposLive?.totalSeg ?? ruta.tiempos.totalSeg)} ·{' '}
           {formatCLP(ruta.costos.total)}
         </Text>
         <Text style={styles.speed}>
@@ -333,6 +369,9 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         {ruta.destino && (
           <Text style={styles.chip}>→ {ruta.destino.nombre}</Text>
         )}
+        <Text style={styles.keepOn}>
+          Pantalla siempre encendida en ruta. No bloquees el iPhone ni cierres Expo Go.
+        </Text>
       </View>
 
       <MapView
@@ -506,6 +545,12 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 20, fontWeight: '700' },
   muted: { color: colors.muted },
   speed: { color: colors.accent2, marginTop: 4, fontWeight: '600' },
+  keepOn: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
+  },
   chip: {
     alignSelf: 'flex-start',
     marginTop: 6,
