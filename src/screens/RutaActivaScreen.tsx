@@ -50,6 +50,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [showGasto, setShowGasto] = useState(false)
   const [chromeVisible, setChromeVisible] = useState(true)
+  const [showDebug, setShowDebug] = useState(false)
   const hideChromeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [monto, setMonto] = useState('')
   const [nombreGasto, setNombreGasto] = useState('')
@@ -479,33 +480,32 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         )}
       </MapView>
 
-      {/* Mini info siempre visible (como Waze) */}
-      <View style={styles.miniHud} pointerEvents="none">
+      {/* Mini info siempre visible (como Waze) — long press abre debug */}
+      <Pressable
+        style={styles.miniHud}
+        onLongPress={() => {
+          setShowDebug((d) => !d)
+          setChromeVisible(true)
+          showToast(showDebug ? 'Debug oculto' : 'Debug visible')
+        }}
+        delayLongPress={600}
+      >
         <Text style={styles.miniSpeed}>{Math.round(vel)}</Text>
         <Text style={styles.miniUnit}>km/h</Text>
         <Text style={styles.miniMeta}>
           {formatDuration(tiemposLive?.totalSeg ?? 0)} · {formatCLP(ruta.costos.total)}
         </Text>
-      </View>
-
-      {!chromeVisible && (
-        <Pressable style={styles.tapHint} onPress={toggleChrome}>
-          <Text style={styles.tapHintText}>Tocá el mapa</Text>
-        </Pressable>
-      )}
+      </Pressable>
 
       {chromeVisible && (
         <>
-          <View style={styles.hudOverlay}>
-            <Text style={styles.title}>{ruta.nombre}</Text>
-            <Text style={styles.muted}>
-              {pausada ? 'Pausada' : 'En curso'} · zoom{' '}
-              {pausada || vel < 8 ? 'cerca' : vel < 70 ? 'medio' : 'lejos'}
-            </Text>
-            {ruta.destino && (
-              <Text style={styles.chip}>→ {ruta.destino.nombre}</Text>
-            )}
-          </View>
+          {(ruta.destino || pausada) && (
+            <View style={styles.hudOverlay} pointerEvents="none">
+              <Text style={styles.title} numberOfLines={1}>
+                {pausada ? 'Pausada' : ruta.destino?.nombre ?? ruta.nombre}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.actionsOverlay}>
             {!pausada ? (
@@ -520,7 +520,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
                   <Text style={styles.btnPrimaryText}>Pausa</Text>
                 </Pressable>
                 <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
-                  <Text style={styles.ghostText}>Finalizar ruta</Text>
+                  <Text style={styles.ghostText}>Finalizar</Text>
                 </Pressable>
               </>
             ) : (
@@ -529,68 +529,73 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
                   style={styles.btnPrimary}
                   onPress={() => setShowGasto(true)}
                 >
-                  <Text style={styles.btnPrimaryText}>Agregar gasto</Text>
+                  <Text style={styles.btnPrimaryText}>Gasto</Text>
                 </Pressable>
                 <Pressable style={styles.btnPrimary} onPress={() => void reanudar()}>
                   <Text style={styles.btnPrimaryText}>Reanudar</Text>
                 </Pressable>
                 <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
-                  <Text style={styles.ghostText}>Finalizar ruta</Text>
+                  <Text style={styles.ghostText}>Finalizar</Text>
                 </Pressable>
               </>
             )}
 
-            <View style={styles.debug}>
-              <Text style={styles.muted}>Debug</Text>
-              <View style={styles.debugRow}>
-                {[0, 40, 90, 120].map((v) => (
+            {showDebug && (
+              <View style={styles.debug}>
+                <Text style={styles.muted}>Debug · mantén km/h para ocultar</Text>
+                <View style={styles.debugRow}>
+                  {[0, 40, 90, 120].map((v) => (
+                    <Pressable
+                      key={v}
+                      style={styles.debugBtn}
+                      onPress={() => {
+                        setSimVel(v === 0 ? null : v)
+                        showToast(v === 0 ? 'GPS real' : `Simular ${v} km/h`)
+                        scheduleHideChrome()
+                      }}
+                    >
+                      <Text style={styles.ghostText}>{v === 0 ? 'GPS' : `${v}`}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={styles.debugRow}>
                   <Pressable
-                    key={v}
                     style={styles.debugBtn}
                     onPress={() => {
-                      setSimVel(v === 0 ? null : v)
-                      showToast(v === 0 ? 'GPS real' : `Simular ${v} km/h`)
-                      scheduleHideChrome()
+                      const pending = PEAJES_DEMO.find(
+                        (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
+                      )
+                      if (!pending) return showToast('No quedan peajes')
+                      setPos({
+                        lat: pending.lat,
+                        lng: pending.lng,
+                        velKmh: simVel ?? 60,
+                      })
+                      void maybePeajeYDestino(pending.lat, pending.lng)
                     }}
                   >
-                    <Text style={styles.ghostText}>{v === 0 ? 'GPS' : `${v}`}</Text>
+                    <Text style={styles.ghostText}>Simular peaje</Text>
                   </Pressable>
-                ))}
+                  <Pressable
+                    style={styles.debugBtn}
+                    onPress={() => {
+                      if (!ruta.destino) return
+                      setPos({
+                        lat: ruta.destino.lat,
+                        lng: ruta.destino.lng,
+                        velKmh: 0,
+                      })
+                      void maybePeajeYDestino(
+                        ruta.destino.lat,
+                        ruta.destino.lng,
+                      )
+                    }}
+                  >
+                    <Text style={styles.ghostText}>Simular llegada</Text>
+                  </Pressable>
+                </View>
               </View>
-              <View style={styles.debugRow}>
-                <Pressable
-                  style={styles.debugBtn}
-                  onPress={() => {
-                    const pending = PEAJES_DEMO.find(
-                      (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
-                    )
-                    if (!pending) return showToast('No quedan peajes')
-                    setPos({
-                      lat: pending.lat,
-                      lng: pending.lng,
-                      velKmh: simVel ?? 60,
-                    })
-                    void maybePeajeYDestino(pending.lat, pending.lng)
-                  }}
-                >
-                  <Text style={styles.ghostText}>Simular peaje</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.debugBtn}
-                  onPress={() => {
-                    if (!ruta.destino) return
-                    setPos({
-                      lat: ruta.destino.lat,
-                      lng: ruta.destino.lng,
-                      velKmh: 0,
-                    })
-                    void maybePeajeYDestino(ruta.destino.lat, ruta.destino.lng)
-                  }}
-                >
-                  <Text style={styles.ghostText}>Simular llegada</Text>
-                </Pressable>
-              </View>
-            </View>
+            )}
           </View>
         </>
       )}
@@ -708,81 +713,62 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 54,
     left: 14,
-    backgroundColor: 'rgba(20,16,12,0.78)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: 'rgba(20,16,12,0.82)',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: colors.line,
     zIndex: 5,
+    minWidth: 96,
   },
   miniSpeed: {
     color: colors.ink,
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: '800',
-    lineHeight: 38,
+    lineHeight: 44,
   },
-  miniUnit: { color: colors.accent2, fontSize: 12, fontWeight: '700' },
-  miniMeta: { color: colors.muted, marginTop: 4, fontSize: 12 },
-  tapHint: {
-    position: 'absolute',
-    bottom: 36,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    zIndex: 5,
-  },
-  tapHintText: { color: '#fff', fontSize: 13 },
+  miniUnit: { color: colors.accent2, fontSize: 13, fontWeight: '700' },
+  miniMeta: { color: colors.muted, marginTop: 4, fontSize: 13 },
   hudOverlay: {
     position: 'absolute',
-    top: 54,
+    top: 58,
     right: 14,
-    left: 110,
-    backgroundColor: 'rgba(20,16,12,0.82)',
+    maxWidth: '48%',
+    backgroundColor: 'rgba(20,16,12,0.75)',
     borderRadius: 14,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: colors.line,
     zIndex: 6,
   },
   actionsOverlay: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 28,
-    gap: 8,
+    left: 16,
+    right: 16,
+    bottom: 34,
+    gap: 10,
     zIndex: 6,
   },
-  title: { color: colors.ink, fontSize: 18, fontWeight: '700' },
-  muted: { color: colors.muted },
-  chip: {
-    alignSelf: 'flex-start',
-    marginTop: 6,
-    color: colors.accent2,
-    backgroundColor: 'rgba(232,163,92,0.15)',
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
+  title: { color: colors.ink, fontSize: 17, fontWeight: '700' },
+  muted: { color: colors.muted, fontSize: 12 },
   btnPrimary: {
     backgroundColor: colors.accent,
     borderRadius: 999,
-    paddingVertical: 14,
+    paddingVertical: 18,
     alignItems: 'center',
   },
-  btnPrimaryText: { color: '#fff8f2', fontWeight: '700', fontSize: 16 },
+  btnPrimaryText: { color: '#fff8f2', fontWeight: '800', fontSize: 18 },
   btnGhost: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    backgroundColor: 'rgba(20,16,12,0.75)',
+    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(20,16,12,0.8)',
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  ghostText: { color: colors.ink },
+  ghostText: { color: colors.ink, fontWeight: '600', fontSize: 16 },
   back: { color: colors.accent2, marginTop: 12 },
   toast: {
     position: 'absolute',
