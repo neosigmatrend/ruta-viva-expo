@@ -224,12 +224,43 @@ export async function fetchRutasDriving(
   return out.slice(0, corredores.length ? 4 : Math.max(maxAlternatives, 3))
 }
 
-/** Distancia mínima del punto a cualquier vértice del polyline (aprox.). */
+/**
+ * Distancia mínima del punto al polyline.
+ * Barrido grueso + refinamiento local (evita saltarse pórticos en rutas largas).
+ */
 export function distanciaARutaMetros(punto: LatLng, ruta: LatLng[]): number {
   if (ruta.length === 0) return Infinity
+  const coarse = Math.max(1, Math.floor(ruta.length / 80))
   let min = Infinity
-  const step = Math.max(1, Math.floor(ruta.length / 120))
-  for (let i = 0; i < ruta.length; i += step) {
+  let bestIdx = 0
+  for (let i = 0; i < ruta.length; i += coarse) {
+    const p = ruta[i]
+    const d = distanciaMetros(
+      punto.latitude,
+      punto.longitude,
+      p.latitude,
+      p.longitude,
+    )
+    if (d < min) {
+      min = d
+      bestIdx = i
+    }
+  }
+  const last = ruta[ruta.length - 1]
+  const dLast = distanciaMetros(
+    punto.latitude,
+    punto.longitude,
+    last.latitude,
+    last.longitude,
+  )
+  if (dLast < min) {
+    min = dLast
+    bestIdx = ruta.length - 1
+  }
+
+  const from = Math.max(0, bestIdx - coarse * 2)
+  const to = Math.min(ruta.length - 1, bestIdx + coarse * 2)
+  for (let i = from; i <= to; i++) {
     const p = ruta[i]
     const d = distanciaMetros(
       punto.latitude,
@@ -239,33 +270,46 @@ export function distanciaARutaMetros(punto: LatLng, ruta: LatLng[]): number {
     )
     if (d < min) min = d
   }
-  const last = ruta[ruta.length - 1]
-  const dLast = distanciaMetros(
-    punto.latitude,
-    punto.longitude,
-    last.latitude,
-    last.longitude,
-  )
-  return Math.min(min, dLast)
+  return min
 }
 
 /**
  * Peajes del catálogo cercanos al trazado.
- * `margenExtraM` se suma al radio propio del peaje.
+ * Deduplica sentidos opuestos del mismo pórtico (misma ubicación).
  */
 export function peajesEnRuta(
   catalogo: PeajeCatalogo[],
   ruta: LatLng[],
-  margenExtraM = 120,
+  margenExtraM = 140,
 ): PeajeCatalogo[] {
   if (ruta.length === 0) return []
-  return catalogo.filter((p) => {
+  const hits = catalogo.filter((p) => {
     const d = distanciaARutaMetros(
       { latitude: p.lat, longitude: p.lng },
       ruta,
     )
     return d <= p.radioMetros + margenExtraM
   })
+
+  // Una entrada por celda ~55 m (evita cobro doble ascendente/descendente).
+  const byCell = new Map<string, PeajeCatalogo>()
+  for (const p of hits) {
+    const key = `${p.autopista}:${p.lat.toFixed(3)},${p.lng.toFixed(3)}`
+    const prev = byCell.get(key)
+    if (!prev) {
+      byCell.set(key, p)
+      continue
+    }
+    // Preferir sentido ascendente / nombre más corto si hay duplicado.
+    const prevPenal =
+      (prev.sentido?.toLowerCase().includes('descendente') ? 1 : 0) +
+      prev.nombre.length / 1000
+    const nextPenal =
+      (p.sentido?.toLowerCase().includes('descendente') ? 1 : 0) +
+      p.nombre.length / 1000
+    if (nextPenal < prevPenal) byCell.set(key, p)
+  }
+  return [...byCell.values()]
 }
 
 export function estimadoMotoPeajes(peajes: PeajeCatalogo[]): number {
