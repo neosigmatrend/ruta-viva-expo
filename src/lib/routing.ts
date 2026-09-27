@@ -32,12 +32,16 @@ const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
     ],
   },
   {
-    // Costanera Norte empalma con Autopista Nororiente (concesión ACNO) hacia Chicureo / 5 Norte.
+    // Criterio: Costanera Norte sentido oriente → Salida 9 (Chicureo/Ruta 5)
+    // → Autopista Nororiente → empalme Ruta 5 Norte.
     id: 'norte_nororiente',
-    label: 'Autopista Nororiente',
+    label: 'Costanera + Autopista Nororiente',
     vias: [
-      { latitude: -33.3944, longitude: -70.6035 }, // Centenario / Lo Saldes (Costanera)
-      { latitude: -33.0008, longitude: -70.6872 }, // Chacabuco → empalme norte
+      { latitude: -33.412, longitude: -70.62 }, // Costanera (antes de Salida 9)
+      { latitude: -33.4093, longitude: -70.6058 }, // Costanera oriente
+      { latitude: -33.3888, longitude: -70.6019 }, // Salida 9 → Autopista Nororiente
+      { latitude: -33.3217, longitude: -70.6256 }, // Nororiente / Chamisero
+      { latitude: -33.3001, longitude: -70.7295 }, // Enlace ACNO → Ruta 5 Norte
     ],
   },
 ]
