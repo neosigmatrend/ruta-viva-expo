@@ -34,8 +34,9 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
 
   return (
     <View style={styles.page}>
-      <Text style={styles.eyebrow}>Chile · moto · Expo Go · v0.1.3</Text>
+      <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.0.3 · OCR boleta</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable style={styles.btnPrimary} onPress={onNueva}>
@@ -81,6 +82,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   title: { color: colors.ink, fontSize: 36, fontWeight: '700', marginTop: 4 },
+  versionBadge: {
+    marginTop: 8,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accent,
+    color: '#fff8f2',
+    fontWeight: '800',
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
   lede: { color: colors.muted, marginTop: 6, marginBottom: 20, maxWidth: 280 },
   btnPrimary: {
     backgroundColor: colors.accent,
