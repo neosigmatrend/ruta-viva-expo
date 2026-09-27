@@ -49,6 +49,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const [simVel, setSimVel] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showGasto, setShowGasto] = useState(false)
+  const [chromeVisible, setChromeVisible] = useState(true)
+  const hideChromeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [monto, setMonto] = useState('')
   const [nombreGasto, setNombreGasto] = useState('')
   const [cat, setCat] = useState<Exclude<CategoriaGasto, 'peaje'>>('comida')
@@ -61,6 +63,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const mapRef = useRef<MapView | null>(null)
   const lastCamAt = useRef(0)
   const lastPersistTrackAt = useRef(0)
+  const ocrGen = useRef(0)
   const [uiTick, setUiTick] = useState(0)
 
   const persist = useCallback(async (next: Ruta) => {
@@ -228,6 +231,33 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const bearing =
     !pausada && vel >= 8 ? rumboDesdeTrack(ruta?.track ?? []) ?? 0 : 0
 
+  const scheduleHideChrome = useCallback(() => {
+    if (hideChromeTimer.current) clearTimeout(hideChromeTimer.current)
+    hideChromeTimer.current = setTimeout(() => {
+      if (rutaRef.current?.estado === 'en_curso') setChromeVisible(false)
+    }, 4500)
+  }, [])
+
+  const toggleChrome = useCallback(() => {
+    setChromeVisible((v) => {
+      const next = !v
+      if (next) scheduleHideChrome()
+      return next
+    })
+  }, [scheduleHideChrome])
+
+  useEffect(() => {
+    if (pausada) {
+      setChromeVisible(true)
+      if (hideChromeTimer.current) clearTimeout(hideChromeTimer.current)
+      return
+    }
+    scheduleHideChrome()
+    return () => {
+      if (hideChromeTimer.current) clearTimeout(hideChromeTimer.current)
+    }
+  }, [pausada, scheduleHideChrome])
+
   useEffect(() => {
     if (!pos || !mapRef.current) return
     const now = Date.now()
@@ -296,11 +326,22 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     onFinalizada(next.id)
   }
 
+  const resetOcrForm = () => {
+    ocrGen.current += 1
+    setFotoUri(null)
+    setMonto('')
+    setOcrCandidatos([])
+    setOcrStatus('idle')
+  }
+
   const correrOcr = async (uri: string) => {
+    const gen = ++ocrGen.current
     setOcrStatus('loading')
     setOcrCandidatos([])
+    setMonto('') // nunca reutilizar monto de la foto anterior
     try {
       const { sugerido, candidatos } = await detectarMontoDesdeUri(uri)
+      if (gen !== ocrGen.current) return // llegó tarde otra foto
       setOcrCandidatos(candidatos)
       if (sugerido != null) {
         setMonto(String(sugerido))
@@ -308,21 +349,22 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         showToast(`Detectado ${formatCLP(sugerido)} · confirmá`)
         Alert.alert(
           'Monto detectado',
-          `${formatCLP(sugerido)}\n\nConfirmá o elegí otro valor abajo.`,
+          `${formatCLP(sugerido)}\n\nConfirmá o corregí. Si no coincide, escribilo a mano.`,
         )
       } else {
         setOcrStatus('fail')
         Alert.alert(
           'Sin monto',
-          'Leí la boleta pero no encontré el total. Escribilo a mano.',
+          'No encontré el total en este documento. Las facturas electrónicas a veces fallan: escribí el monto a mano.',
         )
       }
     } catch (e) {
+      if (gen !== ocrGen.current) return
       setOcrStatus('fail')
       const msg = e instanceof Error ? e.message : 'Error de red/OCR'
       Alert.alert(
         'No se pudo leer',
-        `${msg}\n\nNecesitás internet. Podés escribir el monto a mano (ej. 277312).`,
+        `${msg}\n\nFacturas SII / muy arrugadas suelen fallar. Escribí el monto a mano.`,
       )
     }
   }
@@ -334,11 +376,15 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       return
     }
     const res = await ImagePicker.launchCameraAsync({
-      quality: 0.55,
+      quality: 0.7,
       allowsEditing: false,
     })
     if (!res.canceled && res.assets[0]) {
       const uri = res.assets[0].uri
+      // Limpiar sugerencia anterior ANTES de la foto nueva
+      setMonto('')
+      setOcrCandidatos([])
+      setOcrStatus('loading')
       setFotoUri(uri)
       void correrOcr(uri)
     }
@@ -369,11 +415,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     ]
     await persist({ ...r, gastos, costos: recalcularCostos(gastos) })
     setShowGasto(false)
-    setMonto('')
     setNombreGasto('')
-    setFotoUri(null)
-    setOcrStatus('idle')
-    setOcrCandidatos([])
+    resetOcrForm()
   }
 
   const coords = useMemo(
@@ -398,27 +441,9 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
 
   return (
     <View style={styles.page}>
-      <View style={styles.hud}>
-        <Text style={styles.title}>{ruta.nombre}</Text>
-        <Text style={styles.muted}>
-          {pausada ? 'Pausada' : 'En curso'} ·{' '}
-          {formatDuration(tiemposLive?.totalSeg ?? ruta.tiempos.totalSeg)} ·{' '}
-          {formatCLP(ruta.costos.total)}
-        </Text>
-        <Text style={styles.speed}>
-          {Math.round(vel)} km/h · zoom {pausada || vel < 8 ? 'cerca' : vel < 70 ? 'medio' : 'lejos'}
-        </Text>
-        {ruta.destino && (
-          <Text style={styles.chip}>→ {ruta.destino.nombre}</Text>
-        )}
-        <Text style={styles.keepOn}>
-          Pantalla siempre encendida en ruta. No bloquees el iPhone ni cierres Expo Go.
-        </Text>
-      </View>
-
       <MapView
         ref={mapRef}
-        style={styles.map}
+        style={StyleSheet.absoluteFill}
         initialRegion={{
           latitude: pos?.lat ?? ruta.origen?.lat ?? -33.45,
           longitude: pos?.lng ?? ruta.origen?.lng ?? -70.66,
@@ -427,6 +452,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         }}
         showsUserLocation
         followsUserLocation={false}
+        onPress={toggleChrome}
       >
         {PEAJES_DEMO.map((p) => (
           <Marker
@@ -434,6 +460,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             coordinate={{ latitude: p.lat, longitude: p.lng }}
             pinColor="#c45c26"
             title={p.nombre}
+            tappable={false}
           />
         ))}
         {ruta.destino && (
@@ -444,6 +471,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             }}
             pinColor="#3b82f6"
             title={ruta.destino.nombre}
+            tappable={false}
           />
         )}
         {coords.length >= 2 && (
@@ -451,83 +479,127 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         )}
       </MapView>
 
+      {/* Mini info siempre visible (como Waze) */}
+      <View style={styles.miniHud} pointerEvents="none">
+        <Text style={styles.miniSpeed}>{Math.round(vel)}</Text>
+        <Text style={styles.miniUnit}>km/h</Text>
+        <Text style={styles.miniMeta}>
+          {formatDuration(tiemposLive?.totalSeg ?? 0)} · {formatCLP(ruta.costos.total)}
+        </Text>
+      </View>
+
+      {!chromeVisible && (
+        <Pressable style={styles.tapHint} onPress={toggleChrome}>
+          <Text style={styles.tapHintText}>Tocá el mapa</Text>
+        </Pressable>
+      )}
+
+      {chromeVisible && (
+        <>
+          <View style={styles.hudOverlay}>
+            <Text style={styles.title}>{ruta.nombre}</Text>
+            <Text style={styles.muted}>
+              {pausada ? 'Pausada' : 'En curso'} · zoom{' '}
+              {pausada || vel < 8 ? 'cerca' : vel < 70 ? 'medio' : 'lejos'}
+            </Text>
+            {ruta.destino && (
+              <Text style={styles.chip}>→ {ruta.destino.nombre}</Text>
+            )}
+          </View>
+
+          <View style={styles.actionsOverlay}>
+            {!pausada ? (
+              <>
+                <Pressable
+                  style={styles.btnPrimary}
+                  onPress={() => {
+                    scheduleHideChrome()
+                    void pausar()
+                  }}
+                >
+                  <Text style={styles.btnPrimaryText}>Pausa</Text>
+                </Pressable>
+                <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
+                  <Text style={styles.ghostText}>Finalizar ruta</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  style={styles.btnPrimary}
+                  onPress={() => setShowGasto(true)}
+                >
+                  <Text style={styles.btnPrimaryText}>Agregar gasto</Text>
+                </Pressable>
+                <Pressable style={styles.btnPrimary} onPress={() => void reanudar()}>
+                  <Text style={styles.btnPrimaryText}>Reanudar</Text>
+                </Pressable>
+                <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
+                  <Text style={styles.ghostText}>Finalizar ruta</Text>
+                </Pressable>
+              </>
+            )}
+
+            <View style={styles.debug}>
+              <Text style={styles.muted}>Debug</Text>
+              <View style={styles.debugRow}>
+                {[0, 40, 90, 120].map((v) => (
+                  <Pressable
+                    key={v}
+                    style={styles.debugBtn}
+                    onPress={() => {
+                      setSimVel(v === 0 ? null : v)
+                      showToast(v === 0 ? 'GPS real' : `Simular ${v} km/h`)
+                      scheduleHideChrome()
+                    }}
+                  >
+                    <Text style={styles.ghostText}>{v === 0 ? 'GPS' : `${v}`}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.debugRow}>
+                <Pressable
+                  style={styles.debugBtn}
+                  onPress={() => {
+                    const pending = PEAJES_DEMO.find(
+                      (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
+                    )
+                    if (!pending) return showToast('No quedan peajes')
+                    setPos({
+                      lat: pending.lat,
+                      lng: pending.lng,
+                      velKmh: simVel ?? 60,
+                    })
+                    void maybePeajeYDestino(pending.lat, pending.lng)
+                  }}
+                >
+                  <Text style={styles.ghostText}>Simular peaje</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.debugBtn}
+                  onPress={() => {
+                    if (!ruta.destino) return
+                    setPos({
+                      lat: ruta.destino.lat,
+                      lng: ruta.destino.lng,
+                      velKmh: 0,
+                    })
+                    void maybePeajeYDestino(ruta.destino.lat, ruta.destino.lng)
+                  }}
+                >
+                  <Text style={styles.ghostText}>Simular llegada</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </>
+      )}
+
       {toast && (
         <View style={styles.toast}>
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
-
-      <View style={styles.actions}>
-        {!pausada ? (
-          <>
-            <Pressable style={styles.btnPrimary} onPress={() => void pausar()}>
-              <Text style={styles.btnPrimaryText}>Pausa</Text>
-            </Pressable>
-            <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
-              <Text style={styles.ghostText}>Finalizar ruta</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable style={styles.btnPrimary} onPress={() => setShowGasto(true)}>
-              <Text style={styles.btnPrimaryText}>Agregar gasto</Text>
-            </Pressable>
-            <Pressable style={styles.btnPrimary} onPress={() => void reanudar()}>
-              <Text style={styles.btnPrimaryText}>Reanudar</Text>
-            </Pressable>
-            <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
-              <Text style={styles.ghostText}>Finalizar ruta</Text>
-            </Pressable>
-          </>
-        )}
-      </View>
-
-      <View style={styles.debug}>
-        <Text style={styles.muted}>Debug velocidad</Text>
-        <View style={styles.debugRow}>
-          {[0, 40, 90, 120].map((v) => (
-            <Pressable
-              key={v}
-              style={styles.debugBtn}
-              onPress={() => {
-                setSimVel(v === 0 ? null : v)
-                showToast(v === 0 ? 'GPS real' : `Simular ${v} km/h`)
-              }}
-            >
-              <Text style={styles.ghostText}>{v === 0 ? 'GPS' : `${v}`}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.debugRow}>
-          <Pressable
-            style={styles.debugBtn}
-            onPress={() => {
-              const pending = PEAJES_DEMO.find(
-                (p) => !ruta.gastos.some((g) => g.peajeId === p.id),
-              )
-              if (!pending) return showToast('No quedan peajes')
-              setPos({ lat: pending.lat, lng: pending.lng, velKmh: simVel ?? 60 })
-              void maybePeajeYDestino(pending.lat, pending.lng)
-            }}
-          >
-            <Text style={styles.ghostText}>Simular peaje</Text>
-          </Pressable>
-          <Pressable
-            style={styles.debugBtn}
-            onPress={() => {
-              if (!ruta.destino) return
-              setPos({
-                lat: ruta.destino.lat,
-                lng: ruta.destino.lng,
-                velKmh: 0,
-              })
-              void maybePeajeYDestino(ruta.destino.lat, ruta.destino.lng)
-            }}
-          >
-            <Text style={styles.ghostText}>Simular llegada</Text>
-          </Pressable>
-        </View>
-      </View>
 
       <Modal visible={showGasto} animationType="slide" transparent>
         <View style={styles.sheetWrap}>
@@ -539,12 +611,22 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             <Pressable style={styles.btnGhost} onPress={() => void tomarFoto()}>
               <Text style={styles.ghostText}>
                 {ocrStatus === 'loading'
-                  ? 'Leyendo boleta…'
+                  ? 'Leyendo documento…'
                   : fotoUri
-                    ? 'Foto lista · cambiar'
-                    : 'Sacar foto boleta'}
+                    ? 'Otra foto (limpia el monto anterior)'
+                    : 'Sacar foto boleta / voucher'}
               </Text>
             </Pressable>
+            {fotoUri && (
+              <Pressable
+                style={styles.btnGhost}
+                onPress={() => {
+                  resetOcrForm()
+                }}
+              >
+                <Text style={styles.ghostText}>Quitar foto y monto</Text>
+              </Pressable>
+            )}
             {fotoUri && (
               <Image source={{ uri: fotoUri }} style={styles.foto} />
             )}
@@ -607,8 +689,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
               style={styles.btnGhost}
               onPress={() => {
                 setShowGasto(false)
-                setOcrStatus('idle')
-                setOcrCandidatos([])
+                setNombreGasto('')
+                resetOcrForm()
               }}
             >
               <Text style={styles.ghostText}>Cancelar</Text>
@@ -621,17 +703,60 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.bg, paddingTop: 48 },
-  hud: { paddingHorizontal: 16, marginBottom: 8 },
-  title: { color: colors.ink, fontSize: 20, fontWeight: '700' },
-  muted: { color: colors.muted },
-  speed: { color: colors.accent2, marginTop: 4, fontWeight: '600' },
-  keepOn: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 6,
-    lineHeight: 16,
+  page: { flex: 1, backgroundColor: '#000' },
+  miniHud: {
+    position: 'absolute',
+    top: 54,
+    left: 14,
+    backgroundColor: 'rgba(20,16,12,0.78)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    zIndex: 5,
   },
+  miniSpeed: {
+    color: colors.ink,
+    fontSize: 36,
+    fontWeight: '800',
+    lineHeight: 38,
+  },
+  miniUnit: { color: colors.accent2, fontSize: 12, fontWeight: '700' },
+  miniMeta: { color: colors.muted, marginTop: 4, fontSize: 12 },
+  tapHint: {
+    position: 'absolute',
+    bottom: 36,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    zIndex: 5,
+  },
+  tapHintText: { color: '#fff', fontSize: 13 },
+  hudOverlay: {
+    position: 'absolute',
+    top: 54,
+    right: 14,
+    left: 110,
+    backgroundColor: 'rgba(20,16,12,0.82)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    zIndex: 6,
+  },
+  actionsOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 28,
+    gap: 8,
+    zIndex: 6,
+  },
+  title: { color: colors.ink, fontSize: 18, fontWeight: '700' },
+  muted: { color: colors.muted },
   chip: {
     alignSelf: 'flex-start',
     marginTop: 6,
@@ -642,8 +767,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  map: { flex: 1, marginHorizontal: 12, borderRadius: 14 },
-  actions: { padding: 12, gap: 8 },
   btnPrimary: {
     backgroundColor: colors.accent,
     borderRadius: 999,
@@ -653,7 +776,8 @@ const styles = StyleSheet.create({
   btnPrimaryText: { color: '#fff8f2', fontWeight: '700', fontSize: 16 },
   btnGhost: {
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(20,16,12,0.75)',
     borderRadius: 999,
     paddingVertical: 12,
     alignItems: 'center',
@@ -662,7 +786,7 @@ const styles = StyleSheet.create({
   back: { color: colors.accent2, marginTop: 12 },
   toast: {
     position: 'absolute',
-    top: 56,
+    top: 120,
     alignSelf: 'center',
     backgroundColor: '#111',
     borderColor: colors.accent,
@@ -673,7 +797,13 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   toastText: { color: colors.ink },
-  debug: { paddingHorizontal: 12, paddingBottom: 10 },
+  debug: {
+    backgroundColor: 'rgba(20,16,12,0.75)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   debugRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   debugBtn: {
     borderWidth: 1,
