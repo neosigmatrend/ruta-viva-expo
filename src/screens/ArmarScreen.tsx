@@ -115,8 +115,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
     }
   }
 
-  /** Mantener pulsado evita mover el pin con un toque accidental. */
-  const onMapLongPress = (e: {
+  /** Doble toque fija el pin; un toque solo no lo mueve. */
+  const onMapDoublePress = (e: {
     nativeEvent: { coordinate: { latitude: number; longitude: number } }
   }) => {
     const { latitude, longitude } = e.nativeEvent.coordinate
@@ -131,7 +131,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
     if (!destino) {
       Alert.alert(
         'Destino',
-        'Buscá una dirección o mantené pulsado el mapa para fijarlo.',
+        'Buscá una dirección o tocá dos veces el mapa para fijarlo.',
       )
       return
     }
@@ -303,8 +303,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           )}
 
           <Text style={styles.hint}>
-            Escribí la dirección y tocá Buscar. El mapa solo mueve el pin si
-            mantenés pulsado (evita toques accidentales).
+            Escribí la dirección y tocá Buscar. En el mapa: dos toques rápidos
+            para fijar el pin (un toque no lo mueve).
           </Text>
           {destino ? (
             <Text style={styles.ok} numberOfLines={2}>
@@ -332,7 +332,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           latitudeDelta: 0.25,
           longitudeDelta: 0.25,
         }}
-        onLongPress={onMapLongPress}
+        onPress={onMapPress}
         moveOnMarkerPress={false}
       >
         {opciones.map((op, i) => (
