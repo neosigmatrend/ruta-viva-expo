@@ -306,11 +306,24 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         setMonto(String(sugerido))
         setOcrStatus('ok')
         showToast(`Detectado ${formatCLP(sugerido)} · confirmá`)
+        Alert.alert(
+          'Monto detectado',
+          `${formatCLP(sugerido)}\n\nConfirmá o elegí otro valor abajo.`,
+        )
       } else {
         setOcrStatus('fail')
+        Alert.alert(
+          'Sin monto',
+          'Leí la boleta pero no encontré el total. Escribilo a mano.',
+        )
       }
-    } catch {
+    } catch (e) {
       setOcrStatus('fail')
+      const msg = e instanceof Error ? e.message : 'Error de red/OCR'
+      Alert.alert(
+        'No se pudo leer',
+        `${msg}\n\nNecesitás internet. Podés escribir el monto a mano (ej. 277312).`,
+      )
     }
   }
 
