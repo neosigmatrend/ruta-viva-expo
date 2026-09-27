@@ -11,11 +11,13 @@ import {
   Platform,
   TouchableWithoutFeedback,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native'
 import MapView, { Marker, Polyline } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { PEAJES_CATALOGO } from '../data/peajes-demo'
 import { formatCLP, formatDuration, newId } from '../lib/geo'
+import { buscarDireccion, type GeocodeHit } from '../lib/geocode'
 import {
   estimadoMotoPeajes,
   fetchRutasDriving,
@@ -40,7 +42,10 @@ type Props = {
 
 export function ArmarScreen({ onCancel, onIniciada }: Props) {
   const [nombre, setNombre] = useState('')
-  const [destLabel, setDestLabel] = useState('Destino')
+  const [direccion, setDireccion] = useState('')
+  const [destLabel, setDestLabel] = useState('')
+  const [sugerencias, setSugerencias] = useState<GeocodeHit[]>([])
+  const [buscando, setBuscando] = useState(false)
   const [destino, setDestino] = useState<GeoPoint | null>(null)
   const [origen, setOrigen] = useState<GeoPoint | null>(null)
   const [opciones, setOpciones] = useState<RutaOpcion[]>([])
@@ -50,14 +55,22 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
   const [busy, setBusy] = useState(false)
   const mapRef = useRef<MapView>(null)
 
-  const fijarDestino = (latitude: number, longitude: number) => {
+  const fijarDestino = (
+    latitude: number,
+    longitude: number,
+    label?: string,
+  ) => {
     Keyboard.dismiss()
+    const nombreDest =
+      label?.trim() || destLabel.trim() || direccion.trim() || 'Destino'
     const point: GeoPoint = {
-      nombre: destLabel.trim() || 'Destino',
+      nombre: nombreDest,
       lat: latitude,
       lng: longitude,
     }
     setDestino(point)
+    setDestLabel(nombreDest)
+    setSugerencias([])
     setOpciones([])
     setPeajesSel([])
     setSel(0)
@@ -65,23 +78,61 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
       {
         latitude,
         longitude,
-        latitudeDelta: 0.04,
-        longitudeDelta: 0.04,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
       },
-      350,
+      400,
     )
   }
 
-  const onMapPress = (e: {
+  const buscarDestino = async () => {
+    const q = direccion.trim()
+    if (q.length < 2) {
+      Alert.alert('Dirección', 'Escribí una ciudad o dirección (ej. Copiapó).')
+      return
+    }
+    setBuscando(true)
+    Keyboard.dismiss()
+    try {
+      const hits = await buscarDireccion(q.includes('Chile') ? q : `${q}, Chile`)
+      if (!hits.length) {
+        Alert.alert('Sin resultados', 'Probá con otra ciudad o más detalle.')
+        setSugerencias([])
+        return
+      }
+      if (hits.length === 1) {
+        fijarDestino(hits[0].lat, hits[0].lng, hits[0].label)
+        return
+      }
+      setSugerencias(hits)
+    } catch (e) {
+      Alert.alert(
+        'Dirección',
+        e instanceof Error ? e.message : 'No se pudo buscar la dirección',
+      )
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  /** Mantener pulsado evita mover el pin con un toque accidental. */
+  const onMapLongPress = (e: {
     nativeEvent: { coordinate: { latitude: number; longitude: number } }
   }) => {
     const { latitude, longitude } = e.nativeEvent.coordinate
-    fijarDestino(latitude, longitude)
+    fijarDestino(
+      latitude,
+      longitude,
+      destLabel.trim() || direccion.trim() || 'Destino en mapa',
+    )
   }
 
   const proponerRutas = async () => {
     if (!destino) {
-      Alert.alert('Destino', 'Tocá el mapa para fijar el destino.')
+      Alert.alert(
+        'Destino',
+        'Buscá una dirección o mantené pulsado el mapa para fijarlo.',
+      )
       return
     }
     setRouting(true)
@@ -124,7 +175,9 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
     const pts = [
       { latitude: from.lat, longitude: from.lng },
       { latitude: to.lat, longitude: to.lng },
-      ...coords.filter((_, i) => i % Math.max(1, Math.floor(coords.length / 40)) === 0),
+      ...coords.filter(
+        (_, i) => i % Math.max(1, Math.floor(coords.length / 40)) === 0,
+      ),
     ]
     mapRef.current?.fitToCoordinates(pts, {
       edgePadding: { top: 60, right: 40, bottom: 80, left: 40 },
@@ -151,15 +204,16 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
       const elegida = opciones[sel]
       const peajes = peajesEnRuta(PEAJES_CATALOGO, elegida.coords)
       const now = new Date().toISOString()
+      const label = destLabel.trim() || destino.nombre
       const ruta: Ruta = {
         id: newId(),
-        nombre: nombre.trim() || `Ruta · ${destLabel.trim() || destino.nombre}`,
+        nombre: nombre.trim() || `Ruta · ${label}`,
         estado: 'en_curso',
         creadaEn: now,
         iniciadaEn: now,
         finalizadaEn: null,
         origen,
-        destino: { ...destino, nombre: destLabel.trim() || destino.nombre },
+        destino: { ...destino, nombre: label },
         radioLlegadaMetros: 300,
         rutaPlanificada: elegida.coords,
         peajeIdsRuta: peajes.map((p) => p.id),
@@ -177,7 +231,9 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
     }
   }
 
-  const puedeIniciar = Boolean(destino && origen && opciones[sel] && !busy && !routing)
+  const puedeIniciar = Boolean(
+    destino && origen && opciones[sel] && !busy && !routing,
+  )
 
   return (
     <KeyboardAvoidingView
@@ -191,40 +247,75 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           </Pressable>
           <Text style={styles.title}>Armar ruta</Text>
 
-          <Text style={styles.label}>Nombre (opcional)</Text>
+          <Text style={styles.label}>Nombre del viaje (opcional)</Text>
           <TextInput
             style={styles.input}
             value={nombre}
             onChangeText={setNombre}
-            placeholder="Ej. Copiapó"
+            placeholder="Ej. Fin de semana Copiapó"
             placeholderTextColor={colors.muted}
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
           />
-          <Text style={styles.label}>Nombre del destino</Text>
-          <TextInput
-            style={styles.input}
-            value={destLabel}
-            onChangeText={setDestLabel}
-            placeholder="Destino"
-            placeholderTextColor={colors.muted}
-            returnKeyType="done"
-            onSubmitEditing={Keyboard.dismiss}
-          />
+
+          <Text style={styles.label}>Dirección o ciudad</Text>
+          <View style={styles.searchRow}>
+            <TextInput
+              style={[styles.input, styles.searchInput]}
+              value={direccion}
+              onChangeText={(t) => {
+                setDireccion(t)
+                setSugerencias([])
+              }}
+              placeholder="Ej. Chillán, Copiapó, Av. Libertador…"
+              placeholderTextColor={colors.muted}
+              returnKeyType="search"
+              onSubmitEditing={() => void buscarDestino()}
+              autoCorrect={false}
+            />
+            <Pressable
+              style={[styles.searchBtn, buscando && styles.btnDisabled]}
+              onPress={() => void buscarDestino()}
+              disabled={buscando}
+            >
+              {buscando ? (
+                <ActivityIndicator color="#fff8f2" />
+              ) : (
+                <Text style={styles.searchBtnText}>Buscar</Text>
+              )}
+            </Pressable>
+          </View>
+
+          {sugerencias.length > 0 && (
+            <View style={styles.suggestBox}>
+              {sugerencias.map((s, i) => (
+                <Pressable
+                  key={`${s.lat}-${s.lng}-${i}`}
+                  style={styles.suggestRow}
+                  onPress={() => fijarDestino(s.lat, s.lng, s.label)}
+                >
+                  <Text style={styles.suggestText} numberOfLines={2}>
+                    {s.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.hint}>
-            1) Destino · 2) Proponer rutas · 3) Elegí corredor · peajes de esa
-            ruta (Central, Costanera, Vespucio, Autopista Nororiente, 5 Sur…)
+            Escribí la dirección y tocá Buscar. El mapa solo mueve el pin si
+            mantenés pulsado (evita toques accidentales).
           </Text>
           {destino ? (
-            <Text style={styles.ok}>
-              ✓ Destino · {destino.lat.toFixed(4)}, {destino.lng.toFixed(4)}
+            <Text style={styles.ok} numberOfLines={2}>
+              ✓ {destLabel || destino.nombre}
             </Text>
           ) : (
-            <Text style={styles.warn}>Aún no hay destino en el mapa</Text>
+            <Text style={styles.warn}>Sin destino todavía</Text>
           )}
           {opciones[sel] ? (
             <Text style={styles.muted}>
-              {peajesSel.length} peajes en la ruta · moto {formatCLP(estSel)} ·{' '}
+              {peajesSel.length} peajes · moto {formatCLP(estSel)} ·{' '}
               {(opciones[sel].distanceM / 1000).toFixed(1)} km ·{' '}
               {formatDuration(opciones[sel].durationSeg)}
             </Text>
@@ -241,7 +332,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           latitudeDelta: 0.25,
           longitudeDelta: 0.25,
         }}
-        onPress={onMapPress}
+        onLongPress={onMapLongPress}
         moveOnMarkerPress={false}
       >
         {opciones.map((op, i) => (
@@ -358,7 +449,33 @@ const styles = StyleSheet.create({
     padding: 12,
     color: colors.ink,
   },
-  hint: { color: colors.muted, marginTop: 8, marginBottom: 4 },
+  searchRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  searchInput: { flex: 1 },
+  searchBtn: {
+    backgroundColor: colors.accent2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minWidth: 88,
+    alignItems: 'center',
+  },
+  searchBtnText: { color: '#fff8f2', fontWeight: '700' },
+  suggestBox: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    backgroundColor: '#120f0c',
+    overflow: 'hidden',
+  },
+  suggestRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  suggestText: { color: colors.ink, fontSize: 14 },
+  hint: { color: colors.muted, marginTop: 8, marginBottom: 4, fontSize: 13 },
   muted: { color: colors.muted, marginBottom: 4 },
   ok: { color: colors.ok, marginBottom: 4, fontWeight: '600' },
   warn: { color: colors.accent2, marginBottom: 4 },
