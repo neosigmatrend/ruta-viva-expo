@@ -442,7 +442,34 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     }
   }
 
-  const tomarFoto = async () => {
+  const aplicarImagen = (uri: string) => {
+    // Limpiar sugerencia anterior ANTES de leer la nueva
+    setMonto('')
+    setOcrCandidatos([])
+    setOcrStatus('loading')
+    setFotoUri(uri)
+    void correrOcr(uri)
+  }
+
+  /** Preferido para OCR: foto/documento ya en Fotos o Archivos. */
+  const elegirDeGaleria = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert('Galería', 'Necesitamos permiso para elegir la imagen.')
+      return
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: false,
+      // en iOS permite también archivos recientes / carpeta Fotos
+    })
+    if (!res.canceled && res.assets[0]) {
+      aplicarImagen(res.assets[0].uri)
+    }
+  }
+
+  const tomarConCamara = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
       Alert.alert('Cámara', 'Necesitamos permiso de cámara.')
@@ -453,13 +480,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       allowsEditing: false,
     })
     if (!res.canceled && res.assets[0]) {
-      const uri = res.assets[0].uri
-      // Limpiar sugerencia anterior ANTES de la foto nueva
-      setMonto('')
-      setOcrCandidatos([])
-      setOcrStatus('loading')
-      setFotoUri(uri)
-      void correrOcr(uri)
+      aplicarImagen(res.assets[0].uri)
     }
   }
 
@@ -706,24 +727,28 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={styles.title}>Agregar gasto</Text>
             <Text style={styles.muted}>
-              Solo detenido · sacá foto y confirmá el monto sugerido
+              Solo detenido · mejor desde galería (foto nítida) · confirmá el monto
             </Text>
-            <Pressable style={styles.btnGhost} onPress={() => void tomarFoto()}>
-              <Text style={styles.ghostText}>
+            <Pressable
+              style={styles.btnPrimary}
+              onPress={() => void elegirDeGaleria()}
+              disabled={ocrStatus === 'loading'}
+            >
+              <Text style={styles.btnPrimaryText}>
                 {ocrStatus === 'loading'
                   ? 'Leyendo documento…'
-                  : fotoUri
-                    ? 'Otra foto (limpia el monto anterior)'
-                    : 'Sacar foto boleta / voucher'}
+                  : 'Elegir de galería / carpeta'}
               </Text>
             </Pressable>
+            <Pressable
+              style={styles.btnGhost}
+              onPress={() => void tomarConCamara()}
+              disabled={ocrStatus === 'loading'}
+            >
+              <Text style={styles.ghostText}>Sacar foto ahora (cámara)</Text>
+            </Pressable>
             {fotoUri && (
-              <Pressable
-                style={styles.btnGhost}
-                onPress={() => {
-                  resetOcrForm()
-                }}
-              >
+              <Pressable style={styles.btnGhost} onPress={resetOcrForm}>
                 <Text style={styles.ghostText}>Quitar foto y monto</Text>
               </Pressable>
             )}
