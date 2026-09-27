@@ -4,12 +4,14 @@ import { HomeScreen } from './src/screens/HomeScreen'
 import { ArmarScreen } from './src/screens/ArmarScreen'
 import { RutaActivaScreen } from './src/screens/RutaActivaScreen'
 import { ResumenScreen } from './src/screens/ResumenScreen'
+import { MapaMacroScreen } from './src/screens/MapaMacroScreen'
 
 type Screen =
   | { name: 'home' }
   | { name: 'armar' }
   | { name: 'activa'; rutaId: string }
   | { name: 'resumen'; rutaId: string }
+  | { name: 'mapaMacro'; rutaIds: string[] }
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' })
@@ -22,6 +24,7 @@ export default function App() {
           onNueva={() => setScreen({ name: 'armar' })}
           onContinuar={(id) => setScreen({ name: 'activa', rutaId: id })}
           onResumen={(id) => setScreen({ name: 'resumen', rutaId: id })}
+          onMapaMacro={(ids) => setScreen({ name: 'mapaMacro', rutaIds: ids })}
         />
       )}
       {screen.name === 'armar' && (
@@ -41,6 +44,12 @@ export default function App() {
         <ResumenScreen
           rutaId={screen.rutaId}
           onHome={() => setScreen({ name: 'home' })}
+        />
+      )}
+      {screen.name === 'mapaMacro' && (
+        <MapaMacroScreen
+          rutaIds={screen.rutaIds}
+          onBack={() => setScreen({ name: 'home' })}
         />
       )}
     </>

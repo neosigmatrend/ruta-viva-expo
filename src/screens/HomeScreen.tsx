@@ -24,9 +24,15 @@ type Props = {
   onNueva: () => void
   onContinuar: (id: string) => void
   onResumen: (id: string) => void
+  onMapaMacro: (ids: string[]) => void
 }
 
-export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
+export function HomeScreen({
+  onNueva,
+  onContinuar,
+  onResumen,
+  onMapaMacro,
+}: Props) {
   const [activa, setActiva] = useState<Ruta | null>(null)
   const [historial, setHistorial] = useState<Ruta[]>([])
   const [seleccionando, setSeleccionando] = useState(false)
@@ -162,7 +168,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.6.5 · swipe borrar</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.6 · mapa del viaje</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable
@@ -274,22 +280,36 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
               {nSel === historial.length ? 'Ninguna' : 'Todas'}
             </Text>
           </Pressable>
-          <Pressable
-            style={[
-              styles.btnBorrar,
-              (!nSel || borrando) && styles.btnDisabled,
-            ]}
-            onPress={confirmarBorrar}
-            disabled={!nSel || borrando}
-          >
-            <Text style={styles.btnBorrarText}>
-              {borrando
-                ? 'Borrando…'
-                : nSel
-                  ? `Borrar (${nSel})`
-                  : 'Borrar'}
-            </Text>
-          </Pressable>
+          <View style={styles.selActions}>
+            <Pressable
+              style={[styles.btnMapa, (!nSel || borrando) && styles.btnDisabled]}
+              onPress={() => {
+                if (!nSel) return
+                onMapaMacro([...seleccion])
+              }}
+              disabled={!nSel || borrando}
+            >
+              <Text style={styles.btnMapaText}>
+                {nSel ? `Mapa (${nSel})` : 'Mapa'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.btnBorrar,
+                (!nSel || borrando) && styles.btnDisabled,
+              ]}
+              onPress={confirmarBorrar}
+              disabled={!nSel || borrando}
+            >
+              <Text style={styles.btnBorrarText}>
+                {borrando
+                  ? 'Borrando…'
+                  : nSel
+                    ? `Borrar (${nSel})`
+                    : 'Borrar'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -478,10 +498,18 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 12,
   },
+  selActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  btnMapa: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  btnMapaText: { color: '#fff8f2', fontWeight: '800', fontSize: 14 },
   btnBorrar: {
     backgroundColor: colors.danger,
     borderRadius: 999,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   btnBorrarText: { color: '#fff8f2', fontWeight: '800', fontSize: 14 },

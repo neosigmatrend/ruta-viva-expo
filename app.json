@@ -19,7 +19,9 @@
         "NSCameraUsageDescription": "Para foto de boletas de gastos.",
         "NSPhotoLibraryUsageDescription": "Para adjuntar foto de boletas.",
         "NSMicrophoneUsageDescription": "Para tips de voz en pausa.",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -58,7 +60,8 @@
           "cameraPermission": "Permitir cámara para foto de boleta.",
           "photosPermission": "Permitir fotos para boletas."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }
