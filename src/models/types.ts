@@ -71,6 +71,8 @@ export type AutopistaCodigo =
   | 'R5_LVS' // Ruta 5 Los Vilos – La Serena (Elqui)
   | 'R5_VALS' // Ruta 5 La Serena – Vallenar
   | 'R5_VCAL' // Ruta 5 Vallenar – Caldera
+  | 'R5_ST' // Ruta 5 Santiago – Talca / Acceso Sur
+  | 'R5_TCH' // Ruta 5 Talca – Chillán
 
 /** @deprecated usar AutopistaCodigo */
 export type AutopistaUrbana = AutopistaCodigo

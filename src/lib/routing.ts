@@ -13,7 +13,7 @@ export type RutaOpcion = {
 
 const OSRM = 'https://router.project-osrm.org/route/v1/driving/'
 
-/** Corredores urbanos forzados cuando OSRM no entrega alternativas (viajes largos al norte). */
+/** Corredores urbanos forzados cuando OSRM no entrega alternativas (viajes largos). */
 const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
   {
     id: 'norte_tunel_vespucio',
@@ -41,6 +41,33 @@ const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
   },
 ]
 
+const CORREDORES_SUR: { id: string; label: string; vias: LatLng[] }[] = [
+  {
+    id: 'sur_acceso_sur',
+    label: 'Acceso Sur + 5 Sur',
+    vias: [
+      { latitude: -33.58, longitude: -70.61 }, // Acceso Sur / La Pintana
+      { latitude: -33.91, longitude: -70.73 }, // Angostura
+    ],
+  },
+  {
+    id: 'sur_central',
+    label: 'Autopista Central + 5 Sur',
+    vias: [
+      { latitude: -33.5, longitude: -70.68 },
+      { latitude: -33.7, longitude: -70.72 },
+    ],
+  },
+  {
+    id: 'sur_vespucio',
+    label: 'Vespucio Sur + Acceso Sur',
+    vias: [
+      { latitude: -33.52, longitude: -70.6 },
+      { latitude: -33.58, longitude: -70.61 },
+    ],
+  },
+]
+
 function enSantiagoMetro(p: LatLng): boolean {
   return (
     p.latitude < -33.2 &&
@@ -55,6 +82,12 @@ function viajeAlNorte(from: LatLng, to: LatLng): boolean {
   if (!enSantiagoMetro(from)) return false
   // Copiapó / La Serena / etc., o al menos ~20 km al norte
   return to.latitude > -33.05 || to.latitude - from.latitude > 0.18
+}
+
+/** Destino al sur (Chillán / Talca / etc.). */
+function viajeAlSur(from: LatLng, to: LatLng): boolean {
+  if (!enSantiagoMetro(from)) return false
+  return to.latitude < -34.2 || from.latitude - to.latitude > 0.25
 }
 
 function coordsFromGeometry(geometry: {
@@ -129,11 +162,16 @@ export async function fetchRutasDriving(
 ): Promise<RutaOpcion[]> {
   const out: RutaOpcion[] = []
   const alNorte = viajeAlNorte(from, to)
+  const alSur = !alNorte && viajeAlSur(from, to)
+  const corredores = alNorte
+    ? CORREDORES_NORTE
+    : alSur
+      ? CORREDORES_SUR
+      : []
 
-  // Al norte: primero corredores con nombre (OSRM largo casi no da alternativas).
-  if (alNorte) {
+  if (corredores.length) {
     const settled = await Promise.allSettled(
-      CORREDORES_NORTE.map(async (c) => {
+      corredores.map(async (c) => {
         const routes = await osrmRoute([from, ...c.vias, to], 0)
         const route = routes[0]
         return {
@@ -153,7 +191,7 @@ export async function fetchRutasDriving(
     }
   }
 
-  const nativeAlts = alNorte ? 0 : Math.max(0, maxAlternatives - 1)
+  const nativeAlts = corredores.length ? 0 : Math.max(0, maxAlternatives - 1)
   try {
     const routes = await osrmRoute([from, to], nativeAlts)
     routes.forEach((route, i) => {
@@ -164,7 +202,6 @@ export async function fetchRutasDriving(
         distanceM: route.distance,
         durationSeg: Math.round(route.duration),
       }
-      // No duplicar la sugerencia OSRM si ya es un corredor norte.
       if (out.some((o) => casiIguales(o, cand))) return
       out.push(cand)
     })
@@ -176,7 +213,7 @@ export async function fetchRutasDriving(
     throw new Error('No hay ruta vial entre esos puntos')
   }
 
-  return out.slice(0, alNorte ? 4 : Math.max(maxAlternatives, 3))
+  return out.slice(0, corredores.length ? 4 : Math.max(maxAlternatives, 3))
 }
 
 /** Distancia mínima del punto a cualquier vértice del polyline (aprox.). */

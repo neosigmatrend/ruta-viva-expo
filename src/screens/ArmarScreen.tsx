@@ -212,8 +212,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
             onSubmitEditing={Keyboard.dismiss}
           />
           <Text style={styles.hint}>
-            1) Destino · 2) Proponer rutas · 3) Elegí corredor (al norte: túnel,
-            Central o Nororiente)
+            1) Destino · 2) Proponer rutas · 3) Elegí corredor · peajes de esa
+            ruta (Central, Costanera, Vespucio, Nororiente, 5 Sur…)
           </Text>
           {destino ? (
             <Text style={styles.ok}>

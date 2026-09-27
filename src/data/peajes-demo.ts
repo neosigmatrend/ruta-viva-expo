@@ -1,16 +1,8 @@
 import type { PeajeCatalogo } from '../models/types'
+import { PEAJES_RED } from './peajesRed'
 
-/**
- * Catálogo Opción A + 5 Norte a Copiapó.
- *
- * Urbano: MOP Tarifas Urbanas 2026 (TSAC / AVNO) + coords OSM.
- * Interurbano (PDF MOP enero/mayo 2026):
- *  - STGO-LOS-VILOS.pdf, LOS-VILOS-LA-SERENA.pdf,
- *    LA-SERENA-VALLENAR.pdf, VALLENAR-CALDERA.pdf
- *  - coords: OpenStreetMap
- */
-export const PEAJES_CATALOGO: PeajeCatalogo[] = [
-  // —— Urbano Opción A ——
+/** Túnel + Ruta 5 Norte interurbana (curado). */
+const PEAJES_NORTE_INTER: PeajeCatalogo[] = [
   {
     id: 'tsac_p102_kennedy_el_salto',
     mopId: 242,
@@ -46,61 +38,6 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · TSAC Eje C2',
     fuenteCoords: 'OSM P101 / PC 101',
   },
-  {
-    id: 'avno_p15_el_salto_recoleta',
-    mopId: 204,
-    nombre: 'Vespucio Norte · P15 El Salto → Recoleta',
-    autopista: 'AVNO',
-    lat: -33.388664,
-    lng: -70.632967,
-    radioMetros: 110,
-    tarifaMotoNormal: 141,
-    tarifaMotoPunta: 281,
-    tarifaMotoSaturacion: 422,
-    tipo: 'free_flow',
-    sentido: 'Oriente → Poniente',
-    opcionA: true,
-    viajeCopiapo: true,
-    fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
-    fuenteCoords: 'OSM P15',
-  },
-  {
-    id: 'avno_p13_recoleta_fontova',
-    mopId: 205,
-    nombre: 'Vespucio Norte · P13 Recoleta → Pedro Fontova',
-    autopista: 'AVNO',
-    lat: -33.373364,
-    lng: -70.664615,
-    radioMetros: 110,
-    tarifaMotoNormal: 412,
-    tarifaMotoPunta: 824,
-    tarifaMotoSaturacion: 1236,
-    tipo: 'free_flow',
-    sentido: 'Oriente → Poniente',
-    opcionA: true,
-    viajeCopiapo: true,
-    fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
-    fuenteCoords: 'OSM P13',
-  },
-  {
-    id: 'avno_p11_fontova_ruta5',
-    mopId: 206,
-    nombre: 'Vespucio Norte · P11 Pedro Fontova → Ruta 5 Norte',
-    autopista: 'AVNO',
-    lat: -33.365821,
-    lng: -70.695114,
-    radioMetros: 110,
-    tarifaMotoNormal: 301,
-    tarifaMotoPunta: 603,
-    tipo: 'free_flow',
-    sentido: 'Oriente → Poniente',
-    opcionA: true,
-    viajeCopiapo: true,
-    fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
-    fuenteCoords: 'OSM P11',
-  },
-
-  // —— Ruta 5 Santiago – Los Vilos (Nueva Aconcagua) ——
   {
     id: 'r5_slv_lo_marcoleta',
     nombre: '5 Norte · Lo Marcoleta',
@@ -217,8 +154,6 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto)',
     fuenteCoords: 'OSM Peaje Pichidangui',
   },
-
-  // —— Ruta 5 Los Vilos – La Serena (Elqui) ——
   {
     id: 'r5_lvs_troncal_sur',
     nombre: '5 Norte · Elqui Troncal Sur (Puerto Oscuro)',
@@ -247,8 +182,6 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     fuenteTarifa: 'MOP PDF 2026 LOS-VILOS-LA-SERENA (moto troncal)',
     fuenteCoords: 'OSM Peaje Troncal Norte Elqui',
   },
-
-  // —— Ruta 5 La Serena – Vallenar (Excel VALS 2026) ——
   {
     id: 'r5_vals_punta_colorada',
     mopId: 277,
@@ -279,8 +212,6 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     fuenteTarifa: 'MOP PDF 2026 LA-SERENA-VALLENAR',
     fuenteCoords: 'OSM Peaje Cachiyuyo',
   },
-
-  // —— Ruta 5 Vallenar – Caldera ——
   {
     id: 'r5_vcal_totoral',
     mopId: 249,
@@ -314,11 +245,29 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
   },
 ]
 
-/** Alias usado por pantallas: catálogo activo detectable por GPS. */
+function mergeCatalogos(...listas: PeajeCatalogo[][]): PeajeCatalogo[] {
+  const out: PeajeCatalogo[] = []
+  const seen = new Set<string>()
+  for (const lista of listas) {
+    for (const p of lista) {
+      const key = p.mopId != null ? `${p.autopista}:${p.mopId}` : p.id
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(p)
+    }
+  }
+  return out
+}
+
+/** Catálogo activo: red RM/Sur + 5 Norte. */
+export const PEAJES_CATALOGO: PeajeCatalogo[] = mergeCatalogos(
+  PEAJES_NORTE_INTER,
+  PEAJES_RED,
+)
+
 export const PEAJES_DEMO = PEAJES_CATALOGO
 
 export const PEAJES_OPCION_A = PEAJES_CATALOGO.filter((p) => p.opcionA)
-
 export const PEAJES_VIAJE_COPIAPO = PEAJES_CATALOGO.filter((p) => p.viajeCopiapo)
 
 export const estimadoMotoOpcionANormal = (): number =>
@@ -326,3 +275,4 @@ export const estimadoMotoOpcionANormal = (): number =>
 
 export const estimadoMotoViajeCopiapo = (): number =>
   PEAJES_VIAJE_COPIAPO.reduce((s, p) => s + p.tarifaMotoNormal, 0)
+
