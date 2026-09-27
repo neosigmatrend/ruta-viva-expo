@@ -585,7 +585,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor={p.opcionA ? '#c45c26' : '#8a8175'}
+            pinColor={p.viajeCopiapo || p.opcionA ? '#c45c26' : '#8a8175'}
             title={p.nombre}
             description={`Moto ${formatCLP(p.tarifaMotoNormal)}`}
             tappable={false}

@@ -1,12 +1,16 @@
 import type { PeajeCatalogo } from '../models/types'
 
 /**
- * Catálogo urbano Opción A: Ñuñoa → Túnel San Cristóbal → Vespucio Norte → 5 Norte.
+ * Catálogo Opción A + 5 Norte a Copiapó.
  *
- * Tarifas: MOP Tarifas Urbanas 2026 (motos), hoja TSAC / AVNO.
- * Coordenadas: OpenStreetMap highway=toll_gantry (refs P101/P102/P15/P13/P11).
+ * Urbano: MOP Tarifas Urbanas 2026 (TSAC / AVNO) + coords OSM.
+ * Interurbano (PDF MOP enero/mayo 2026):
+ *  - STGO-LOS-VILOS.pdf, LOS-VILOS-LA-SERENA.pdf,
+ *    LA-SERENA-VALLENAR.pdf, VALLENAR-CALDERA.pdf
+ *  - coords: OpenStreetMap
  */
 export const PEAJES_CATALOGO: PeajeCatalogo[] = [
+  // —— Urbano Opción A ——
   {
     id: 'tsac_p102_kennedy_el_salto',
     mopId: 242,
@@ -21,6 +25,7 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     tipo: 'free_flow',
     sentido: 'Kennedy → El Salto',
     opcionA: true,
+    viajeCopiapo: true,
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · TSAC Eje C1',
     fuenteCoords: 'OSM P102 / PC 102',
   },
@@ -37,6 +42,7 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     tipo: 'free_flow',
     sentido: 'El Salto → Kennedy',
     opcionA: false,
+    viajeCopiapo: false,
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · TSAC Eje C2',
     fuenteCoords: 'OSM P101 / PC 101',
   },
@@ -54,6 +60,7 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     tipo: 'free_flow',
     sentido: 'Oriente → Poniente',
     opcionA: true,
+    viajeCopiapo: true,
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
     fuenteCoords: 'OSM P15',
   },
@@ -71,6 +78,7 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     tipo: 'free_flow',
     sentido: 'Oriente → Poniente',
     opcionA: true,
+    viajeCopiapo: true,
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
     fuenteCoords: 'OSM P13',
   },
@@ -87,16 +95,234 @@ export const PEAJES_CATALOGO: PeajeCatalogo[] = [
     tipo: 'free_flow',
     sentido: 'Oriente → Poniente',
     opcionA: true,
+    viajeCopiapo: true,
     fuenteTarifa: 'MOP Tarifas Urbanas 2026 · AVNO',
     fuenteCoords: 'OSM P11',
+  },
+
+  // —— Ruta 5 Santiago – Los Vilos (Nueva Aconcagua) ——
+  {
+    id: 'r5_slv_lo_marcoleta',
+    nombre: '5 Norte · Lo Marcoleta',
+    autopista: 'R5_SLV',
+    lat: -33.35801,
+    lng: -70.70383,
+    radioMetros: 120,
+    tarifaMotoNormal: 54,
+    tipo: 'free_flow',
+    sentido: 'Ambos / norte',
+    viajeCopiapo: true,
+    tarifaMotoPunta: 109,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto TBFP)',
+    fuenteCoords: 'OSM P1 Lo Marcoleta',
+  },
+  {
+    id: 'r5_slv_buenaventura',
+    nombre: '5 Norte · Enlace Buenaventura',
+    autopista: 'R5_SLV',
+    lat: -33.33983,
+    lng: -70.71201,
+    radioMetros: 120,
+    tarifaMotoNormal: 65,
+    tarifaMotoPunta: 131,
+    tipo: 'free_flow',
+    sentido: 'Ambos / norte',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto TBFP)',
+    fuenteCoords: 'OSM P3 Buenaventura',
+  },
+  {
+    id: 'r5_slv_la_montana',
+    nombre: '5 Norte · La Montaña',
+    autopista: 'R5_SLV',
+    lat: -33.31711,
+    lng: -70.7222,
+    radioMetros: 120,
+    tarifaMotoNormal: 119,
+    tarifaMotoPunta: 238,
+    tipo: 'free_flow',
+    sentido: 'Ambos / norte',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto TBFP)',
+    fuenteCoords: 'OSM P5 La Montaña',
+  },
+  {
+    id: 'r5_slv_lo_pinto',
+    nombre: '5 Norte · Enlace Lo Pinto',
+    autopista: 'R5_SLV',
+    lat: -33.27992,
+    lng: -70.7391,
+    radioMetros: 120,
+    tarifaMotoNormal: 146,
+    tarifaMotoPunta: 292,
+    tipo: 'free_flow',
+    sentido: 'Ambos / norte',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto TBFP)',
+    fuenteCoords: 'OSM P7 Lo Pinto',
+  },
+  {
+    id: 'r5_slv_lampa',
+    nombre: '5 Norte · Peaje Lampa',
+    autopista: 'R5_SLV',
+    lat: -33.2356,
+    lng: -70.75884,
+    radioMetros: 160,
+    tarifaMotoNormal: 300,
+    tipo: 'free_flow',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto)',
+    fuenteCoords: 'OSM Peaje Lampa',
+  },
+  {
+    id: 'r5_slv_las_vegas',
+    nombre: '5 Norte · Peaje Las Vegas',
+    autopista: 'R5_SLV',
+    lat: -32.84328,
+    lng: -70.98932,
+    radioMetros: 180,
+    tarifaMotoNormal: 900,
+    tipo: 'free_flow',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto)',
+    fuenteCoords: 'OSM / Apple Maps Peaje Las Vegas',
+  },
+  {
+    id: 'r5_slv_tunel_el_melon',
+    nombre: '5 Norte · Túnel El Melón',
+    autopista: 'R5_SLV',
+    lat: -32.62961,
+    lng: -71.23086,
+    radioMetros: 160,
+    tarifaMotoNormal: 900,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto)',
+    fuenteCoords: 'OSM Peaje Túnel El Melón',
+  },
+  {
+    id: 'r5_slv_pichidangui',
+    nombre: '5 Norte · Peaje Pichidangui',
+    autopista: 'R5_SLV',
+    lat: -32.17496,
+    lng: -71.52067,
+    radioMetros: 180,
+    tarifaMotoNormal: 900,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 STGO-LOS-VILOS (moto)',
+    fuenteCoords: 'OSM Peaje Pichidangui',
+  },
+
+  // —— Ruta 5 Los Vilos – La Serena (Elqui) ——
+  {
+    id: 'r5_lvs_troncal_sur',
+    nombre: '5 Norte · Elqui Troncal Sur (Puerto Oscuro)',
+    autopista: 'R5_LVS',
+    lat: -31.42015,
+    lng: -71.57071,
+    radioMetros: 180,
+    tarifaMotoNormal: 1250,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 LOS-VILOS-LA-SERENA (moto troncal)',
+    fuenteCoords: 'OSM Peaje Puerto Oscuro / Troncal Sur',
+  },
+  {
+    id: 'r5_lvs_troncal_norte',
+    nombre: '5 Norte · Elqui Troncal Norte',
+    autopista: 'R5_LVS',
+    lat: -30.40772,
+    lng: -71.4462,
+    radioMetros: 180,
+    tarifaMotoNormal: 1250,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 LOS-VILOS-LA-SERENA (moto troncal)',
+    fuenteCoords: 'OSM Peaje Troncal Norte Elqui',
+  },
+
+  // —— Ruta 5 La Serena – Vallenar (Excel VALS 2026) ——
+  {
+    id: 'r5_vals_punta_colorada',
+    mopId: 277,
+    nombre: '5 Norte · Peaje Punta Colorada',
+    autopista: 'R5_VALS',
+    lat: -29.37101,
+    lng: -71.07315,
+    radioMetros: 180,
+    tarifaMotoNormal: 950,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 LA-SERENA-VALLENAR',
+    fuenteCoords: 'OSM Peaje Punta Colorada',
+  },
+  {
+    id: 'r5_vals_cachiyuyo',
+    mopId: 275,
+    nombre: '5 Norte · Peaje Cachiyuyo',
+    autopista: 'R5_VALS',
+    lat: -29.08674,
+    lng: -70.91695,
+    radioMetros: 180,
+    tarifaMotoNormal: 950,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 LA-SERENA-VALLENAR',
+    fuenteCoords: 'OSM Peaje Cachiyuyo',
+  },
+
+  // —— Ruta 5 Vallenar – Caldera ——
+  {
+    id: 'r5_vcal_totoral',
+    mopId: 249,
+    nombre: '5 Norte · Peaje Totoral',
+    autopista: 'R5_VCAL',
+    lat: -27.99707,
+    lng: -70.56592,
+    radioMetros: 180,
+    tarifaMotoNormal: 850,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    viajeCopiapo: true,
+    fuenteTarifa: 'MOP PDF 2026 VALLENAR-CALDERA',
+    fuenteCoords: 'OSM Peaje Totoral',
+  },
+  {
+    id: 'r5_vcal_puerto_viejo',
+    mopId: 250,
+    nombre: '5 Norte · Peaje Puerto Viejo',
+    autopista: 'R5_VCAL',
+    lat: -27.34817,
+    lng: -70.63638,
+    radioMetros: 180,
+    tarifaMotoNormal: 500,
+    tipo: 'plaza',
+    sentido: 'Ambos',
+    // Norte de Copiapó (hacia Caldera); no entra al estimado a Copiapó ciudad.
+    viajeCopiapo: false,
+    fuenteTarifa: 'MOP PDF 2026 VALLENAR-CALDERA',
+    fuenteCoords: 'OSM Peaje Puerto Viejo',
   },
 ]
 
 /** Alias usado por pantallas: catálogo activo detectable por GPS. */
 export const PEAJES_DEMO = PEAJES_CATALOGO
 
-/** Peajes del corredor urbano Opción A (estimado al armar ruta). */
 export const PEAJES_OPCION_A = PEAJES_CATALOGO.filter((p) => p.opcionA)
+
+export const PEAJES_VIAJE_COPIAPO = PEAJES_CATALOGO.filter((p) => p.viajeCopiapo)
 
 export const estimadoMotoOpcionANormal = (): number =>
   PEAJES_OPCION_A.reduce((s, p) => s + p.tarifaMotoNormal, 0)
+
+export const estimadoMotoViajeCopiapo = (): number =>
+  PEAJES_VIAJE_COPIAPO.reduce((s, p) => s + p.tarifaMotoNormal, 0)

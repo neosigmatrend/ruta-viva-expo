@@ -16,6 +16,7 @@ import * as Location from 'expo-location'
 import {
   PEAJES_CATALOGO,
   estimadoMotoOpcionANormal,
+  estimadoMotoViajeCopiapo,
 } from '../data/peajes-demo'
 import { formatCLP, newId } from '../lib/geo'
 import { saveRuta } from '../lib/storage'
@@ -39,7 +40,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
   const [busy, setBusy] = useState(false)
   const mapRef = useRef<MapView>(null)
 
-  const est = estimadoMotoOpcionANormal()
+  const estUrbano = estimadoMotoOpcionANormal()
+  const estCopiapo = estimadoMotoViajeCopiapo()
 
   const fijarDestino = (latitude: number, longitude: number) => {
     Keyboard.dismiss()
@@ -146,8 +148,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
             Cerrá el teclado y tocá el mapa para fijar el pin azul.
           </Text>
           <Text style={styles.muted}>
-            Opción A urbana (túnel + Vespucio Norte) · estimado moto normal{' '}
-            {formatCLP(est)}
+            Opción A urbana · {formatCLP(estUrbano)} · Ñuñoa→Copiapó moto{' '}
+            {formatCLP(estCopiapo)}
           </Text>
           {destino ? (
             <Text style={styles.ok}>
@@ -175,7 +177,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor={p.opcionA ? '#c45c26' : '#8a8175'}
+            pinColor={p.viajeCopiapo || p.opcionA ? '#c45c26' : '#8a8175'}
             title={p.nombre}
             description={`Moto ${formatCLP(p.tarifaMotoNormal)} · ${p.autopista}`}
             tappable={false}

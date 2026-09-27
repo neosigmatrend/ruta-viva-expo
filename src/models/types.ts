@@ -58,7 +58,7 @@ export interface Gasto {
   creadoEn: string
 }
 
-export type AutopistaUrbana =
+export type AutopistaCodigo =
   | 'TSAC' // Túnel San Cristóbal
   | 'AVNO' // Vespucio Norte
   | 'AVO1'
@@ -67,13 +67,20 @@ export type AutopistaUrbana =
   | 'SIOP'
   | 'ACNO'
   | 'AVAM'
+  | 'R5_SLV' // Ruta 5 Santiago – Los Vilos (Nueva Aconcagua)
+  | 'R5_LVS' // Ruta 5 Los Vilos – La Serena (Elqui)
+  | 'R5_VALS' // Ruta 5 La Serena – Vallenar
+  | 'R5_VCAL' // Ruta 5 Vallenar – Caldera
+
+/** @deprecated usar AutopistaCodigo */
+export type AutopistaUrbana = AutopistaCodigo
 
 export interface PeajeCatalogo {
   id: string
   /** Id interno MOP del punto de cobro, si aplica. */
   mopId?: number
   nombre: string
-  autopista: AutopistaUrbana
+  autopista: AutopistaCodigo
   lat: number
   lng: number
   radioMetros: number
@@ -87,6 +94,8 @@ export interface PeajeCatalogo {
   sentido?: string
   /** Incluido en estimado urbano Opción A (Ñuñoa → 5 Norte). */
   opcionA?: boolean
+  /** Incluido en estimado Ñuñoa → Copiapó (urbano A + 5 Norte). */
+  viajeCopiapo?: boolean
   fuenteTarifa?: string
   fuenteCoords?: string
 }
