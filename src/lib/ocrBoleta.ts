@@ -1,7 +1,7 @@
-import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
+import { Platform } from 'react-native'
 
-/** Extrae candidatos de monto CLP desde texto OCR de boleta/voucher. */
+/** Extrae candidatos de monto CLP desde texto OCR. */
 export function parseMontosCLP(texto: string): number[] {
   const encontrados = new Set<number>()
   const upper = texto.toUpperCase().replace(/[|]/g, 'I')
@@ -28,17 +28,30 @@ export function parseMontosCLP(texto: string): number[] {
   return [...encontrados].sort((a, b) => b - a)
 }
 
+/**
+ * En facturas chilenas el bloque final suele ser:
+ * TOTAL
+ * 233.035
+ * 44.277
+ * 277.312  ← este es el total a pagar
+ */
 export function preferirTotal(
   texto: string,
   candidatos: number[],
 ): number | null {
   const upper = texto.toUpperCase()
-  const m = upper.match(
-    /TOTAL(?:\s*A\s*PAGAR)?\s*[:$]?\s*\$?\s*([\d.\s]+)/,
-  )
-  if (m) {
-    const n = normalizarMonto(m[1].replace(/\s/g, ''))
-    if (n != null) return n
+  const markers = ['\nTOTAL', '\n TOTAL', 'TOTAL\n']
+  let idx = -1
+  for (const mk of markers) {
+    const i = upper.lastIndexOf(mk)
+    if (i > idx) idx = i
+  }
+  if (idx >= 0) {
+    const slice = upper.slice(idx, idx + 160)
+    const nums = [...slice.matchAll(/\b(\d{1,3}(?:\.\d{3}){1,3})\b/g)]
+      .map((m) => normalizarMonto(m[1]))
+      .filter((n): n is number => n != null && n >= 1000)
+    if (nums.length) return Math.max(...nums)
   }
   return candidatos[0] ?? null
 }
@@ -55,7 +68,6 @@ function normalizarMonto(raw: string): number | null {
         ? `${parts[0].replace(/\./g, '')}.${parts[1]}`
         : s.replace(/,/g, '')
   } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
-    // Formato chileno miles: 277.312 → 277312
     s = s.replace(/\./g, '')
   }
   const n = Number(s)
@@ -64,54 +76,59 @@ function normalizarMonto(raw: string): number | null {
 }
 
 /**
- * OCR vía OCR.space con base64 (más fiable en Expo Go / iOS).
- * Requiere internet. Clave free de prueba.
+ * OCR.space con archivo JPEG (base64 falla con 400 en esta API).
+ * Requiere internet.
  */
 export async function detectarMontoDesdeUri(
   uri: string,
 ): Promise<{ sugerido: number | null; candidatos: number[]; texto: string }> {
-  const manipulated = await ImageManipulator.manipulateAsync(
+  const compressed = await ImageManipulator.manipulateAsync(
     uri,
-    [{ resize: { width: 1600 } }],
-    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    [{ resize: { width: 1400 } }],
+    { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG },
   )
 
-  let base64 = manipulated.base64
-  if (!base64) {
-    base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    })
-  }
+  const fileUri =
+    Platform.OS === 'ios' && !compressed.uri.startsWith('file://')
+      ? `file://${compressed.uri}`
+      : compressed.uri
 
   const form = new FormData()
-  form.append('apikey', 'K87899142388957')
+  form.append('apikey', 'helloworld')
   form.append('language', 'spa')
   form.append('isOverlayRequired', 'false')
   form.append('OCREngine', '2')
   form.append('scale', 'true')
   form.append('detectOrientation', 'true')
-  form.append('base64Image', `data:image/jpeg;base64,${base64}`)
+  form.append('file', {
+    uri: fileUri,
+    name: 'boleta.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob)
 
   const res = await fetch('https://api.ocr.space/parse/image', {
     method: 'POST',
     body: form,
   })
 
-  if (!res.ok) {
-    throw new Error(`OCR HTTP ${res.status}`)
-  }
-
-  const json = (await res.json()) as {
+  const rawText = await res.text()
+  let json: {
     IsErroredOnProcessing?: boolean
     ErrorMessage?: string | string[]
     ParsedResults?: { ParsedText?: string }[]
+    OCRExitCode?: number
+  }
+  try {
+    json = JSON.parse(rawText)
+  } catch {
+    throw new Error(`OCR respuesta inválida (HTTP ${res.status})`)
   }
 
-  if (json.IsErroredOnProcessing) {
+  if (!res.ok || json.IsErroredOnProcessing) {
     const msg = Array.isArray(json.ErrorMessage)
       ? json.ErrorMessage.join(' ')
-      : json.ErrorMessage ?? 'OCR error'
-    throw new Error(msg)
+      : json.ErrorMessage ?? `HTTP ${res.status}`
+    throw new Error(String(msg))
   }
 
   const texto =
