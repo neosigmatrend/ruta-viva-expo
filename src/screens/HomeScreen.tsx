@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -6,10 +6,11 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  Alert,
 } from 'react-native'
 import { useFocusEffect } from '../lib/useFocusEffect'
 import { sentidoDeRuta, type Ruta } from '../models/types'
-import { getRutaActiva, listRutas } from '../lib/storage'
+import { deleteRutas, getRutaActiva, listRutas } from '../lib/storage'
 import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
 
@@ -22,28 +23,92 @@ type Props = {
 export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
   const [activa, setActiva] = useState<Ruta | null>(null)
   const [historial, setHistorial] = useState<Ruta[]>([])
+  const [seleccionando, setSeleccionando] = useState(false)
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
+  const [borrando, setBorrando] = useState(false)
 
   const load = useCallback(async () => {
     const a = await getRutaActiva()
     const all = await listRutas()
     setActiva(a ?? null)
-    setHistorial(all.filter((r) => r.estado === 'finalizada').slice(0, 12))
+    setHistorial(all.filter((r) => r.estado === 'finalizada').slice(0, 40))
   }, [])
 
-  useFocusEffect(load)
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+      setSeleccionando(false)
+      setSeleccion(new Set())
+    }, [load]),
+  )
+
+  const nSel = seleccion.size
+  const todosIds = useMemo(() => historial.map((r) => r.id), [historial])
+
+  const toggleSel = (id: string) => {
+    setSeleccion((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const salirSeleccion = () => {
+    setSeleccionando(false)
+    setSeleccion(new Set())
+  }
+
+  const seleccionarTodo = () => {
+    if (nSel === historial.length) setSeleccion(new Set())
+    else setSeleccion(new Set(todosIds))
+  }
+
+  const confirmarBorrar = () => {
+    if (!nSel) return
+    Alert.alert(
+      'Borrar historial',
+      nSel === 1
+        ? '¿Borrar esta ruta del historial?'
+        : `¿Borrar ${nSel} rutas del historial?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: () => void borrarSeleccionadas(),
+        },
+      ],
+    )
+  }
+
+  const borrarSeleccionadas = async () => {
+    setBorrando(true)
+    try {
+      await deleteRutas([...seleccion])
+      salirSeleccion()
+      await load()
+    } finally {
+      setBorrando(false)
+    }
+  }
 
   return (
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.5.9 · ida / vuelta</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.0 · borrar historial</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
-      <Pressable style={styles.btnPrimary} onPress={onNueva}>
+      <Pressable
+        style={[styles.btnPrimary, seleccionando && styles.btnDisabled]}
+        onPress={onNueva}
+        disabled={seleccionando}
+      >
         <Text style={styles.btnPrimaryText}>Nueva ruta</Text>
       </Pressable>
 
-      {activa && (
+      {activa && !seleccionando && (
         <Pressable style={styles.card} onPress={() => onContinuar(activa.id)}>
           <Text style={styles.cardLabel}>Continuar ruta</Text>
           <View style={styles.rowTop}>
@@ -59,16 +124,63 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
         </Pressable>
       )}
 
-      <Text style={styles.section}>Historial</Text>
+      <View style={styles.sectionRow}>
+        <Text style={styles.section}>Historial</Text>
+        {historial.length > 0 && (
+          <Pressable
+            onPress={() => {
+              if (seleccionando) salirSeleccion()
+              else setSeleccionando(true)
+            }}
+          >
+            <Text style={styles.link}>
+              {seleccionando ? 'Cancelar' : 'Seleccionar'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
       <Text style={styles.legend}>
         <Text style={{ color: colors.ida }}>↑ verde Ida</Text>
         {'  ·  '}
         <Text style={{ color: colors.vuelta }}>↓ azul Vuelta</Text>
       </Text>
+
+      {seleccionando && historial.length > 0 && (
+        <View style={styles.selBar}>
+          <Pressable onPress={seleccionarTodo}>
+            <Text style={styles.link}>
+              {nSel === historial.length ? 'Ninguna' : 'Todas'}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.btnBorrar,
+              (!nSel || borrando) && styles.btnDisabled,
+            ]}
+            onPress={confirmarBorrar}
+            disabled={!nSel || borrando}
+          >
+            <Text style={styles.btnBorrarText}>
+              {borrando
+                ? 'Borrando…'
+                : nSel
+                  ? `Borrar (${nSel})`
+                  : 'Borrar'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       <FlatList
         data={historial}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={load}
+            enabled={!seleccionando}
+          />
+        }
         ListEmptyComponent={
           <Text style={styles.muted}>Sin rutas finalizadas.</Text>
         }
@@ -78,10 +190,28 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
           const fechaColor = esIda ? colors.ida : colors.vuelta
           const flecha = esIda ? '↑' : '↓'
           const fecha = formatFechaCorta(item.finalizadaEn || item.creadaEn)
+          const checked = seleccion.has(item.id)
           return (
-            <Pressable style={styles.row} onPress={() => onResumen(item.id)}>
+            <Pressable
+              style={[styles.row, checked && styles.rowSelected]}
+              onPress={() => {
+                if (seleccionando) toggleSel(item.id)
+                else onResumen(item.id)
+              }}
+              onLongPress={() => {
+                if (!seleccionando) {
+                  setSeleccionando(true)
+                  setSeleccion(new Set([item.id]))
+                }
+              }}
+            >
               <View style={styles.rowTop}>
-                <Text style={[styles.fecha, { color: fechaColor }]}>
+                {seleccionando && (
+                  <Text style={styles.check}>{checked ? '☑' : '☐'}</Text>
+                )}
+                <Text
+                  style={[styles.fecha, { color: fechaColor, flex: 1 }]}
+                >
                   {flecha} {fecha}
                 </Text>
                 <Text style={[styles.sentidoTag, { color: fechaColor }]}>
@@ -107,10 +237,7 @@ function SentidoBadge({ sentido }: { sentido: 'ida' | 'vuelta' }) {
   const esIda = sentido === 'ida'
   return (
     <Text
-      style={[
-        styles.badge,
-        { color: esIda ? colors.ida : colors.vuelta },
-      ]}
+      style={[styles.badge, { color: esIda ? colors.ida : colors.vuelta }]}
     >
       {esIda ? '↑ IDA' : '↓ VUELTA'}
     </Text>
@@ -148,6 +275,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   btnPrimaryText: { color: '#fff8f2', fontWeight: '700', fontSize: 17 },
+  btnDisabled: { opacity: 0.45 },
   card: {
     backgroundColor: colors.elev,
     borderRadius: 14,
@@ -156,11 +284,42 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     marginBottom: 18,
   },
-  cardLabel: { color: colors.accent2, fontSize: 11, textTransform: 'uppercase' },
-  cardTitle: { color: colors.ink, fontWeight: '600', fontSize: 16, marginTop: 2, flex: 1 },
+  cardLabel: {
+    color: colors.accent2,
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontWeight: '600',
+    fontSize: 16,
+    marginTop: 2,
+    flex: 1,
+  },
   muted: { color: colors.muted, marginTop: 2 },
-  section: { color: colors.ink, fontWeight: '600', marginBottom: 4 },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  section: { color: colors.ink, fontWeight: '600' },
+  link: { color: colors.accent2, fontWeight: '700', fontSize: 14 },
   legend: { color: colors.muted, fontSize: 12, marginBottom: 8 },
+  selBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 12,
+  },
+  btnBorrar: {
+    backgroundColor: colors.danger,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  btnBorrarText: { color: '#fff8f2', fontWeight: '800', fontSize: 14 },
   row: {
     backgroundColor: colors.elev,
     borderRadius: 12,
@@ -169,11 +328,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
   },
+  rowSelected: {
+    borderColor: colors.danger,
+    backgroundColor: 'rgba(217,107,92,0.12)',
+  },
   rowTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  check: {
+    color: colors.ink,
+    fontSize: 18,
+    width: 26,
   },
   fecha: {
     fontWeight: '800',

@@ -31,3 +31,16 @@ export async function getRutaActiva(): Promise<Ruta | undefined> {
   const all = await listRutas()
   return all.find((r) => r.estado === 'en_curso' || r.estado === 'pausada')
 }
+
+/** Elimina rutas por id (p. ej. historial seleccionado). */
+export async function deleteRutas(ids: string[]): Promise<number> {
+  if (!ids.length) return 0
+  const remove = new Set(ids)
+  const all = await listRutas()
+  const next = all.filter((r) => !remove.has(r.id))
+  const deleted = all.length - next.length
+  if (deleted > 0) {
+    await AsyncStorage.setItem(KEY, JSON.stringify(next))
+  }
+  return deleted
+}
