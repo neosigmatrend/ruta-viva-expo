@@ -6,8 +6,9 @@ export function parseMontosCLP(texto: string): number[] {
   const encontrados = new Set<number>()
   const upper = texto.toUpperCase().replace(/[|]/g, 'I')
 
+  // Cualquier comprobante: boleta, factura, voucher, ticket, recibo…
   const patterns = [
-    /(?:TOTAL(?:\s*A\s*PAGAR)?|SUB[\s-]?TOTAL|NETO|IVA|MONTO|PAGO|VALOR)\s*[:$]?\s*\$?\s*([\d.]+(?:,\d{1,2})?)/g,
+    /(?:TOTAL\s*A\s*PAGAR|TOTAL\s*PAGADO|TOTAL|SUB[\s-]?TOTAL|NETO|IVA|MONTO|PAGO|VALOR|IMPORTE|PAGADO)\s*[:$]?\s*\$?\s*([\d.]+(?:,\d{1,2})?)/g,
     /\$\s*([\d.]+(?:,\d{1,2})?)/g,
   ]
 
@@ -29,28 +30,33 @@ export function parseMontosCLP(texto: string): number[] {
 }
 
 /**
- * En facturas chilenas el bloque final suele ser:
- * TOTAL
- * 233.035
- * 44.277
- * 277.312  ← este es el total a pagar
+ * Prioriza el total a pagar en cualquier documento tributario/comercial
+ * (boleta, factura, voucher, ticket…). En facturas el bloque final suele ser:
+ * TOTAL / IVA / 277.312 ← monto a pagar
  */
 export function preferirTotal(
   texto: string,
   candidatos: number[],
 ): number | null {
   const upper = texto.toUpperCase()
-  const markers = ['\nTOTAL', '\n TOTAL', 'TOTAL\n']
+  const markers = [
+    '\nTOTAL A PAGAR',
+    '\nTOTAL PAGADO',
+    'TOTAL A PAGAR',
+    '\nTOTAL',
+    '\n TOTAL',
+    'TOTAL\n',
+  ]
   let idx = -1
   for (const mk of markers) {
     const i = upper.lastIndexOf(mk)
     if (i > idx) idx = i
   }
   if (idx >= 0) {
-    const slice = upper.slice(idx, idx + 160)
+    const slice = upper.slice(idx, idx + 180)
     const nums = [...slice.matchAll(/\b(\d{1,3}(?:\.\d{3}){1,3})\b/g)]
       .map((m) => normalizarMonto(m[1]))
-      .filter((n): n is number => n != null && n >= 1000)
+      .filter((n): n is number => n != null && n >= 100)
     if (nums.length) return Math.max(...nums)
   }
   return candidatos[0] ?? null

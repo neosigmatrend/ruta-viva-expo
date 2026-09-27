@@ -428,7 +428,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         setOcrStatus('fail')
         Alert.alert(
           'Sin monto',
-          'No encontré el total en este documento. Las facturas electrónicas a veces fallan: escribí el monto a mano.',
+          'No encontré el total. Probá boleta, voucher o ticket más nítido, o escribí el monto a mano.',
         )
       }
     } catch (e) {
@@ -437,7 +437,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       const msg = e instanceof Error ? e.message : 'Error de red/OCR'
       Alert.alert(
         'No se pudo leer',
-        `${msg}\n\nFacturas SII / muy arrugadas suelen fallar. Escribí el monto a mano.`,
+        `${msg}\n\nSirve boleta, factura, voucher o ticket. Si falla, escribí el monto a mano.`,
       )
     }
   }
@@ -451,7 +451,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     void correrOcr(uri)
   }
 
-  /** Preferido para OCR: foto/documento ya en Fotos o Archivos. */
+  /** Preferido: comprobante ya en Fotos / Archivos (cualquier tipo). */
   const elegirDeGaleria = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
@@ -727,7 +727,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={styles.title}>Agregar gasto</Text>
             <Text style={styles.muted}>
-              Solo detenido · mejor desde galería (foto nítida) · confirmá el monto
+              Boleta, factura, voucher o ticket · mejor desde galería · confirmá el monto
             </Text>
             <Pressable
               style={styles.btnPrimary}
@@ -736,7 +736,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             >
               <Text style={styles.btnPrimaryText}>
                 {ocrStatus === 'loading'
-                  ? 'Leyendo documento…'
+                  ? 'Leyendo comprobante…'
                   : 'Elegir de galería / carpeta'}
               </Text>
             </Pressable>
