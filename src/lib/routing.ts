@@ -32,16 +32,19 @@ const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
     ],
   },
   {
-    // Criterio: Costanera Norte sentido oriente → Salida 9 (Chicureo/Ruta 5)
-    // → Autopista Nororiente → empalme Ruta 5 Norte.
+    // Criterio del usuario (sin loops en el mapa):
+    // Los Leones → Puente Padre Letelier → Santa María → Costanera Norte
+    // → Salida 9 → Autopista Nororiente → Ruta 5 Norte.
     id: 'norte_nororiente',
     label: 'Costanera + Autopista Nororiente',
     vias: [
-      { latitude: -33.412, longitude: -70.62 }, // Costanera (antes de Salida 9)
-      { latitude: -33.4093, longitude: -70.6058 }, // Costanera oriente
+      { latitude: -33.4257, longitude: -70.604 }, // Los Leones (norte)
+      { latitude: -33.4197, longitude: -70.6115 }, // Puente Padre Letelier
+      { latitude: -33.415, longitude: -70.605 }, // Santa María
+      { latitude: -33.4093, longitude: -70.6058 }, // Costanera Norte oriente
       { latitude: -33.3888, longitude: -70.6019 }, // Salida 9 → Autopista Nororiente
       { latitude: -33.3217, longitude: -70.6256 }, // Nororiente / Chamisero
-      { latitude: -33.3001, longitude: -70.7295 }, // Enlace ACNO → Ruta 5 Norte
+      { latitude: -33.3001, longitude: -70.7295 }, // Enlace → Ruta 5 Norte
     ],
   },
 ]
