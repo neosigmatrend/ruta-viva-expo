@@ -60,8 +60,7 @@
           "cameraPermission": "Permitir cámara para foto de boleta.",
           "photosPermission": "Permitir fotos para boletas."
         }
-      ],
-      "expo-sharing"
+      ]
     ]
   }
 }
