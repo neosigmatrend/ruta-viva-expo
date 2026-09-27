@@ -329,16 +329,21 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   useEffect(() => {
     if (!pos || !mapRef.current) return
     const now = Date.now()
-    if (now - lastCamAt.current < 2500) return
+    if (now - lastCamAt.current < 2200) return
     lastCamAt.current = now
-    mapRef.current.animateToRegion(
+
+    // En marcha: rumbo arriba (GPS). En pausa / lento: norte arriba.
+    const headingUp = !pausada && vel >= 10
+    // altitude aprox. desde el “zoom” por velocidad
+    const altitude = Math.max(450, Math.min(latDelta * 111_000 * 1.35, 12_000))
+    mapRef.current.animateCamera(
       {
-        latitude: pos.lat,
-        longitude: pos.lng,
-        latitudeDelta: latDelta,
-        longitudeDelta: latDelta,
+        center: { latitude: pos.lat, longitude: pos.lng },
+        heading: headingUp ? bearing : 0,
+        pitch: headingUp && vel >= 40 ? 42 : 0,
+        altitude,
       },
-      700,
+      { duration: 650 },
     )
   }, [pos?.lat, pos?.lng, latDelta, bearing, pausada, vel])
 
