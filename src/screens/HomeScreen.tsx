@@ -8,9 +8,10 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native'
+// Alert used for pending-route close options
 import { useFocusEffect } from '../lib/useFocusEffect'
 import { sentidoDeRuta, type Ruta } from '../models/types'
-import { deleteRutas, getRutaActiva, listRutas } from '../lib/storage'
+import { deleteRutas, getRutaActiva, listRutas, saveRuta } from '../lib/storage'
 import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
 
@@ -97,7 +98,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.6.0 · borrar historial</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.1 · ruta pendiente</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable
@@ -109,8 +110,11 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
       </Pressable>
 
       {activa && !seleccionando && (
-        <Pressable style={styles.card} onPress={() => onContinuar(activa.id)}>
-          <Text style={styles.cardLabel}>Continuar ruta</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Ruta pendiente</Text>
+          <Text style={styles.cardHint}>
+            Si salís de la app, acá la retomás. Tocá Continuar o descartala.
+          </Text>
           <View style={styles.rowTop}>
             <Text style={styles.cardTitle} numberOfLines={1}>
               {activa.nombre}
@@ -121,7 +125,50 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
             {activa.estado === 'pausada' ? 'Pausada' : 'En curso'} ·{' '}
             {formatCLP(activa.costos.total)}
           </Text>
-        </Pressable>
+          <View style={styles.pendienteActions}>
+            <Pressable
+              style={styles.btnContinuar}
+              onPress={() => onContinuar(activa.id)}
+            >
+              <Text style={styles.btnContinuarText}>Continuar</Text>
+            </Pressable>
+            <Pressable
+              style={styles.btnDescartar}
+              onPress={() => {
+                Alert.alert(
+                  'Ruta pendiente',
+                  '¿Finalizar y guardar en historial, o descartar?',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Finalizar',
+                      onPress: () =>
+                        void (async () => {
+                          await saveRuta({
+                            ...activa,
+                            estado: 'finalizada',
+                            finalizadaEn: new Date().toISOString(),
+                          })
+                          await load()
+                        })(),
+                    },
+                    {
+                      text: 'Descartar',
+                      style: 'destructive',
+                      onPress: () =>
+                        void (async () => {
+                          await deleteRutas([activa.id])
+                          await load()
+                        })(),
+                    },
+                  ],
+                )
+              }}
+            >
+              <Text style={styles.btnDescartarText}>Cerrar…</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       <View style={styles.sectionRow}>
@@ -289,6 +336,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
   },
+  cardHint: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 6,
+  },
   cardTitle: {
     color: colors.ink,
     fontWeight: '600',
@@ -297,6 +350,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   muted: { color: colors.muted, marginTop: 2 },
+  pendienteActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  btnContinuar: {
+    flex: 1,
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  btnContinuarText: { color: '#fff8f2', fontWeight: '700' },
+  btnDescartar: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDescartarText: { color: colors.muted, fontWeight: '600' },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',

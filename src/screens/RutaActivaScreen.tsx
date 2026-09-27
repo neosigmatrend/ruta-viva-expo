@@ -10,6 +10,7 @@ import {
   Image,
   ScrollView,
   AppState,
+  BackHandler,
 } from 'react-native'
 import MapView, { Marker, Polyline } from 'react-native-maps'
 import * as Location from 'expo-location'
@@ -26,7 +27,7 @@ import {
   peajesEnRuta,
   type LatLng,
 } from '../lib/routing'
-import { getRuta, saveRuta } from '../lib/storage'
+import { deleteRutas, getRuta, saveRuta } from '../lib/storage'
 import {
   recalcularCostos,
   type CategoriaGasto,
@@ -427,6 +428,51 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     onFinalizada(next.id)
   }
 
+  /** Descartar = borrar; no deja “Continuar ruta” fantasma. */
+  const descartar = async () => {
+    const r = rutaRef.current
+    if (!r) {
+      onHome()
+      return
+    }
+    await deleteRutas([r.id])
+    onHome()
+  }
+
+  const pedirSalir = () => {
+    Alert.alert(
+      'Salir de la ruta',
+      'Podés dejarla pendiente y retomarla después desde Inicio (Continuar), finalizarla, o descartarla.',
+      [
+        { text: 'Seguir aquí', style: 'cancel' },
+        {
+          text: 'Dejar pendiente',
+          onPress: () => onHome(),
+        },
+        {
+          text: 'Finalizar',
+          onPress: () => void finalizar(),
+        },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () => void descartar(),
+        },
+      ],
+    )
+  }
+
+  // Android: el botón atrás no puede abandonar la ruta en silencio.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const r = rutaRef.current
+      if (!r || r.estado === 'finalizada') return false
+      pedirSalir()
+      return true
+    })
+    return () => sub.remove()
+  }, [])
+
   const resetOcrForm = () => {
     ocrGen.current += 1
     setFotoUri(null)
@@ -713,6 +759,9 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
                 </Pressable>
                 <Pressable style={styles.btnGhost} onPress={() => void finalizar()}>
                   <Text style={styles.ghostText}>Finalizar</Text>
+                </Pressable>
+                <Pressable style={styles.btnGhost} onPress={pedirSalir}>
+                  <Text style={styles.ghostText}>Salir</Text>
                 </Pressable>
               </>
             )}
