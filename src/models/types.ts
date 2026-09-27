@@ -65,7 +65,7 @@ export type AutopistaCodigo =
   | 'AVSU'
   | 'SINS'
   | 'SIOP'
-  | 'ACNO'
+  | 'ACNO' // Autopista Nororiente (concesión Acceso Nor-Oriente)
   | 'AVAM'
   | 'R5_SLV' // Ruta 5 Santiago – Los Vilos (Nueva Aconcagua)
   | 'R5_LVS' // Ruta 5 Los Vilos – La Serena (Elqui)

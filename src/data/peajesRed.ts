@@ -5,7 +5,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_327',
     mopId: 327,
-    nombre: 'Acceso Nororiente · Pórtico Troncal Poniente Ascendente',
+    nombre: 'Autopista Nororiente · Pórtico Troncal Poniente Ascendente',
     autopista: 'ACNO',
     lat: -33.299471,
     lng: -70.670493,
@@ -20,7 +20,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_328',
     mopId: 328,
-    nombre: 'Acceso Nororiente · Pórtico Troncal Poniente Descendente',
+    nombre: 'Autopista Nororiente · Pórtico Troncal Poniente Descendente',
     autopista: 'ACNO',
     lat: -33.299471,
     lng: -70.670493,
@@ -35,7 +35,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_329',
     mopId: 329,
-    nombre: 'Acceso Nororiente · Pórtico Troncal Oriente Ascendente',
+    nombre: 'Autopista Nororiente · Pórtico Troncal Oriente Ascendente',
     autopista: 'ACNO',
     lat: -33.311318,
     lng: -70.634252,
@@ -50,7 +50,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_330',
     mopId: 330,
-    nombre: 'Acceso Nororiente · Pórtico Troncal Oriente Descendente',
+    nombre: 'Autopista Nororiente · Pórtico Troncal Oriente Descendente',
     autopista: 'ACNO',
     lat: -33.311318,
     lng: -70.634252,
@@ -65,7 +65,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_331',
     mopId: 331,
-    nombre: 'Acceso Nororiente · Pórtico Entrada El Llano Descendente',
+    nombre: 'Autopista Nororiente · Pórtico Entrada El Llano Descendente',
     autopista: 'ACNO',
     lat: -33.285,
     lng: -70.655,
@@ -80,7 +80,7 @@ export const PEAJES_RED: PeajeCatalogo[] = [
   {
     id: 'acno_332',
     mopId: 332,
-    nombre: 'Acceso Nororiente · Pórtico Salida El Llano Ascendente',
+    nombre: 'Autopista Nororiente · Pórtico Salida El Llano Ascendente',
     autopista: 'ACNO',
     lat: -33.285,
     lng: -70.652,

@@ -32,11 +32,12 @@ const CORREDORES_NORTE: { id: string; label: string; vias: LatLng[] }[] = [
     ],
   },
   {
+    // Costanera Norte empalma con Autopista Nororiente (concesión ACNO) hacia Chicureo / 5 Norte.
     id: 'norte_nororiente',
-    label: 'Acceso Nororiente',
+    label: 'Autopista Nororiente',
     vias: [
-      { latitude: -33.36, longitude: -70.58 },
-      { latitude: -33.2, longitude: -70.7 }, // Colina / 5 Norte
+      { latitude: -33.3944, longitude: -70.6035 }, // Centenario / Lo Saldes (Costanera)
+      { latitude: -33.0008, longitude: -70.6872 }, // Chacabuco → empalme norte
     ],
   },
 ]
@@ -153,7 +154,7 @@ export async function fetchRutaDriving(
 
 /**
  * Propone rutas: alternativas nativas OSRM +, si vas al norte desde Santiago,
- * corredores urbanos (túnel/Vespucio, Central, Nororiente) con waypoints.
+ * corredores urbanos (túnel/Vespucio, Central, Autopista Nororiente) con waypoints.
  */
 export async function fetchRutasDriving(
   from: LatLng,
