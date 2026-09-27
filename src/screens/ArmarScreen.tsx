@@ -32,6 +32,7 @@ import {
   type GeoPoint,
   type PeajeCatalogo,
   type Ruta,
+  type SentidoViaje,
 } from '../models/types'
 import { colors } from '../theme'
 
@@ -53,6 +54,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
   const [peajesSel, setPeajesSel] = useState<PeajeCatalogo[]>([])
   const [routing, setRouting] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [sentidoViaje, setSentidoViaje] = useState<SentidoViaje>('ida')
   const mapRef = useRef<MapView>(null)
 
   const fijarDestino = (
@@ -212,6 +214,7 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
         creadaEn: now,
         iniciadaEn: now,
         finalizadaEn: null,
+        sentidoViaje,
         origen,
         destino: { ...destino, nombre: label },
         radioLlegadaMetros: 300,
@@ -257,6 +260,42 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
           />
+
+          <Text style={styles.label}>Sentido</Text>
+          <View style={styles.sentidoRow}>
+            <Pressable
+              style={[
+                styles.sentidoChip,
+                sentidoViaje === 'ida' && styles.sentidoIdaOn,
+              ]}
+              onPress={() => setSentidoViaje('ida')}
+            >
+              <Text
+                style={[
+                  styles.sentidoChipText,
+                  sentidoViaje === 'ida' && styles.sentidoChipTextOn,
+                ]}
+              >
+                ↑ IDA
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.sentidoChip,
+                sentidoViaje === 'vuelta' && styles.sentidoVueltaOn,
+              ]}
+              onPress={() => setSentidoViaje('vuelta')}
+            >
+              <Text
+                style={[
+                  styles.sentidoChipText,
+                  sentidoViaje === 'vuelta' && styles.sentidoChipTextOn,
+                ]}
+              >
+                ↓ VUELTA
+              </Text>
+            </Pressable>
+          </View>
 
           <Text style={styles.label}>Dirección o ciudad</Text>
           <View style={styles.searchRow}>
@@ -450,6 +489,26 @@ const styles = StyleSheet.create({
     padding: 12,
     color: colors.ink,
   },
+  sentidoRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  sentidoChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#120f0c',
+  },
+  sentidoIdaOn: {
+    borderColor: colors.ida,
+    backgroundColor: 'rgba(61,190,110,0.15)',
+  },
+  sentidoVueltaOn: {
+    borderColor: colors.vuelta,
+    backgroundColor: 'rgba(74,143,232,0.15)',
+  },
+  sentidoChipText: { color: colors.muted, fontWeight: '700', fontSize: 15 },
+  sentidoChipTextOn: { color: colors.ink },
   searchRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   searchInput: { flex: 1 },
   searchBtn: {

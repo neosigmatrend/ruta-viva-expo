@@ -1,5 +1,8 @@
 export type EstadoRuta = 'borrador' | 'en_curso' | 'pausada' | 'finalizada'
 
+/** Sentido del viaje al armar la ruta (para historial Ida/Vuelta). */
+export type SentidoViaje = 'ida' | 'vuelta'
+
 export type CategoriaGasto =
   | 'peaje'
   | 'bencina'
@@ -114,6 +117,8 @@ export interface Ruta {
   creadaEn: string
   iniciadaEn: string | null
   finalizadaEn: string | null
+  /** Ida (salida) o Vuelta (regreso). Rutas viejas sin campo = ida. */
+  sentidoViaje?: SentidoViaje
   origen: GeoPoint | null
   destino: GeoPoint | null
   radioLlegadaMetros: number
@@ -128,6 +133,10 @@ export interface Ruta {
   pausas: Pausa[]
   track: TrackPoint[]
   gastos: Gasto[]
+}
+
+export function sentidoDeRuta(r: Pick<Ruta, 'sentidoViaje'>): SentidoViaje {
+  return r.sentidoViaje === 'vuelta' ? 'vuelta' : 'ida'
 }
 
 export const costosVacios = (): Costos => ({

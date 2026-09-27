@@ -8,9 +8,9 @@ import {
   RefreshControl,
 } from 'react-native'
 import { useFocusEffect } from '../lib/useFocusEffect'
-import type { Ruta } from '../models/types'
+import { sentidoDeRuta, type Ruta } from '../models/types'
 import { getRutaActiva, listRutas } from '../lib/storage'
-import { formatCLP, formatDuration } from '../lib/geo'
+import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
 
 type Props = {
@@ -36,7 +36,7 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.5.8 · doble toque mapa</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.5.9 · ida / vuelta</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable style={styles.btnPrimary} onPress={onNueva}>
@@ -46,7 +46,12 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
       {activa && (
         <Pressable style={styles.card} onPress={() => onContinuar(activa.id)}>
           <Text style={styles.cardLabel}>Continuar ruta</Text>
-          <Text style={styles.cardTitle}>{activa.nombre}</Text>
+          <View style={styles.rowTop}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {activa.nombre}
+            </Text>
+            <SentidoBadge sentido={sentidoDeRuta(activa)} />
+          </View>
           <Text style={styles.muted}>
             {activa.estado === 'pausada' ? 'Pausada' : 'En curso'} ·{' '}
             {formatCLP(activa.costos.total)}
@@ -55,21 +60,60 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
       )}
 
       <Text style={styles.section}>Historial</Text>
+      <Text style={styles.legend}>
+        <Text style={{ color: colors.ida }}>↑ verde Ida</Text>
+        {'  ·  '}
+        <Text style={{ color: colors.vuelta }}>↓ azul Vuelta</Text>
+      </Text>
       <FlatList
         data={historial}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
-        ListEmptyComponent={<Text style={styles.muted}>Sin rutas finalizadas.</Text>}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => onResumen(item.id)}>
-            <Text style={styles.cardTitle}>{item.nombre}</Text>
-            <Text style={styles.muted}>
-              {formatDuration(item.tiempos.totalSeg)} · {formatCLP(item.costos.total)}
-            </Text>
-          </Pressable>
-        )}
+        ListEmptyComponent={
+          <Text style={styles.muted}>Sin rutas finalizadas.</Text>
+        }
+        renderItem={({ item }) => {
+          const sentido = sentidoDeRuta(item)
+          const esIda = sentido === 'ida'
+          const fechaColor = esIda ? colors.ida : colors.vuelta
+          const flecha = esIda ? '↑' : '↓'
+          const fecha = formatFechaCorta(item.finalizadaEn || item.creadaEn)
+          return (
+            <Pressable style={styles.row} onPress={() => onResumen(item.id)}>
+              <View style={styles.rowTop}>
+                <Text style={[styles.fecha, { color: fechaColor }]}>
+                  {flecha} {fecha}
+                </Text>
+                <Text style={[styles.sentidoTag, { color: fechaColor }]}>
+                  {esIda ? 'IDA' : 'VUELTA'}
+                </Text>
+              </View>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {item.nombre}
+              </Text>
+              <Text style={styles.muted}>
+                {formatDuration(item.tiempos.totalSeg)} ·{' '}
+                {formatCLP(item.costos.total)}
+              </Text>
+            </Pressable>
+          )
+        }}
       />
     </View>
+  )
+}
+
+function SentidoBadge({ sentido }: { sentido: 'ida' | 'vuelta' }) {
+  const esIda = sentido === 'ida'
+  return (
+    <Text
+      style={[
+        styles.badge,
+        { color: esIda ? colors.ida : colors.vuelta },
+      ]}
+    >
+      {esIda ? '↑ IDA' : '↓ VUELTA'}
+    </Text>
   )
 }
 
@@ -113,9 +157,10 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   cardLabel: { color: colors.accent2, fontSize: 11, textTransform: 'uppercase' },
-  cardTitle: { color: colors.ink, fontWeight: '600', fontSize: 16, marginTop: 2 },
+  cardTitle: { color: colors.ink, fontWeight: '600', fontSize: 16, marginTop: 2, flex: 1 },
   muted: { color: colors.muted, marginTop: 2 },
-  section: { color: colors.ink, fontWeight: '600', marginBottom: 8 },
+  section: { color: colors.ink, fontWeight: '600', marginBottom: 4 },
+  legend: { color: colors.muted, fontSize: 12, marginBottom: 8 },
   row: {
     backgroundColor: colors.elev,
     borderRadius: 12,
@@ -123,5 +168,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.line,
+  },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  fecha: {
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.2,
+  },
+  sentidoTag: {
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  badge: {
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
 })

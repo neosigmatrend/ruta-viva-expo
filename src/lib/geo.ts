@@ -32,6 +32,18 @@ export function formatCLP(n: number): string {
   }).format(n)
 }
 
+/** Fecha corta para historial (ej. 27 sep 2026). */
+export function formatFechaCorta(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('es-CL', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(d)
+}
+
 export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 }

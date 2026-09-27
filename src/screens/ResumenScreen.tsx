@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native'
-import type { Ruta } from '../models/types'
+import { sentidoDeRuta, type Ruta } from '../models/types'
 import { getRuta } from '../lib/storage'
-import { formatCLP, formatDuration } from '../lib/geo'
+import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
 import { colors } from '../theme'
 
 type Props = {
@@ -26,10 +26,17 @@ export function ResumenScreen({ rutaId, onHome }: Props) {
   }
 
   const peajes = ruta.gastos.filter((g) => g.categoria === 'peaje')
+  const sentido = sentidoDeRuta(ruta)
+  const esIda = sentido === 'ida'
+  const fechaColor = esIda ? colors.ida : colors.vuelta
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.eyebrow}>Ruta finalizada</Text>
+      <Text style={[styles.sentidoLine, { color: fechaColor }]}>
+        {esIda ? '↑ IDA' : '↓ VUELTA'} ·{' '}
+        {formatFechaCorta(ruta.finalizadaEn || ruta.creadaEn)}
+      </Text>
       <Text style={styles.title}>{ruta.nombre}</Text>
       <Text style={styles.lede}>
         {ruta.origen?.nombre ?? 'Origen'} → {ruta.destino?.nombre ?? 'Sin destino'}
@@ -94,6 +101,12 @@ function Stat({
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 56 },
   eyebrow: { color: colors.accent2, textTransform: 'uppercase', letterSpacing: 2, fontSize: 11 },
+  sentidoLine: {
+    marginTop: 8,
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
   title: { color: colors.ink, fontSize: 28, fontWeight: '700', marginTop: 4 },
   lede: { color: colors.muted, marginBottom: 16 },
   muted: { color: colors.muted },
