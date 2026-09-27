@@ -19,6 +19,11 @@ import { PEAJES_DEMO } from '../data/peajes-demo'
 import { distanciaMetros, formatCLP, formatDuration, newId } from '../lib/geo'
 import { rumboDesdeTrack, zoomPorVelocidad } from '../lib/mapaVelocidad'
 import { detectarMontoDesdeUri } from '../lib/ocrBoleta'
+import {
+  distanciaARutaMetros,
+  fetchRutaDriving,
+  type LatLng,
+} from '../lib/routing'
 import { getRuta, saveRuta } from '../lib/storage'
 import {
   recalcularCostos,
@@ -51,7 +56,14 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
   const [showGasto, setShowGasto] = useState(false)
   const [chromeVisible, setChromeVisible] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
+  const [rutaSugerida, setRutaSugerida] = useState<LatLng[]>([])
+  const [rutaInfo, setRutaInfo] = useState<{ km: number; min: number } | null>(
+    null,
+  )
   const hideChromeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRerouteAt = useRef(0)
+  const routingBusy = useRef(false)
+  const rutaSugeridaRef = useRef<LatLng[]>([])
   const [monto, setMonto] = useState('')
   const [nombreGasto, setNombreGasto] = useState('')
   const [cat, setCat] = useState<Exclude<CategoriaGasto, 'peaje'>>('comida')
@@ -124,6 +136,48 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     setToast(msg)
     setTimeout(() => setToast(null), 2800)
   }
+
+  const recalcularRuta = useCallback(
+    async (from: LatLng, silent?: boolean) => {
+      const r = rutaRef.current
+      if (!r?.destino || routingBusy.current) return
+      routingBusy.current = true
+      try {
+        const result = await fetchRutaDriving(from, {
+          latitude: r.destino.lat,
+          longitude: r.destino.lng,
+        })
+        rutaSugeridaRef.current = result.coords
+        setRutaSugerida(result.coords)
+        setRutaInfo({
+          km: result.distanceM / 1000,
+          min: Math.round(result.durationSeg / 60),
+        })
+        if (!silent) {
+          setToast('Ruta actualizada (te desviaste)')
+          setTimeout(() => setToast(null), 2800)
+        }
+      } catch {
+        if (!silent) {
+          setToast('No se pudo trazar la ruta')
+          setTimeout(() => setToast(null), 2800)
+        }
+      } finally {
+        routingBusy.current = false
+      }
+    },
+    [],
+  )
+
+  // Primera ruta: origen → destino
+  useEffect(() => {
+    const r = ruta
+    if (!r?.destino) return
+    const from: LatLng = r.origen
+      ? { latitude: r.origen.lat, longitude: r.origen.lng }
+      : { latitude: -33.45, longitude: -70.66 }
+    void recalcularRuta(from, true)
+  }, [ruta?.id, ruta?.destino?.lat, ruta?.destino?.lng, recalcularRuta])
 
   const maybePeajeYDestino = useCallback(
     async (lat: number, lng: number) => {
@@ -218,13 +272,26 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             lastPersistTrackAt.current = now
             void saveRuta(next)
           }
+
+          // Si te desviás de la sugerencia → recalcular desde aquí al destino
+          const sugerida = rutaSugeridaRef.current
+          if (sugerida.length > 2 && now - lastRerouteAt.current > 12000) {
+            const off = distanciaARutaMetros(
+              { latitude: lat, longitude: lng },
+              sugerida,
+            )
+            if (off > 90) {
+              lastRerouteAt.current = now
+              void recalcularRuta({ latitude: lat, longitude: lng }, false)
+            }
+          }
         },
       )
     })()
     return () => {
       sub?.remove()
     }
-  }, [maybePeajeYDestino, simVel])
+  }, [maybePeajeYDestino, recalcularRuta, simVel])
 
   const vel = simVel ?? pos?.velKmh ?? 0
   const pausada = ruta?.estado === 'pausada'
@@ -475,8 +542,26 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
             tappable={false}
           />
         )}
+        {rutaSugerida.length >= 2 && (
+          <Polyline
+            coordinates={rutaSugerida}
+            strokeColor="#3b82f6"
+            strokeWidth={5}
+          />
+        )}
         {coords.length >= 2 && (
           <Polyline coordinates={coords} strokeColor="#c45c26" strokeWidth={4} />
+        )}
+        {ruta.origen && (
+          <Marker
+            coordinate={{
+              latitude: ruta.origen.lat,
+              longitude: ruta.origen.lng,
+            }}
+            pinColor="#22c55e"
+            title="Inicio"
+            tappable={false}
+          />
         )}
       </MapView>
 
@@ -495,6 +580,11 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         <Text style={styles.miniMeta}>
           {formatDuration(tiemposLive?.totalSeg ?? 0)} · {formatCLP(ruta.costos.total)}
         </Text>
+        {rutaInfo && (
+          <Text style={styles.miniMeta}>
+            → {rutaInfo.km.toFixed(1)} km · {rutaInfo.min} min
+          </Text>
+        )}
       </Pressable>
 
       {chromeVisible && (
