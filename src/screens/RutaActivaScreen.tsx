@@ -121,7 +121,8 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background' || state === 'inactive') {
         const r = rutaRef.current
-        if (r && r.estado !== 'finalizada') {
+        // No reescribir si ya finalizó (evita “pendiente zombie”).
+        if (r && (r.estado === 'en_curso' || r.estado === 'pausada')) {
           void saveRuta(r)
         }
       }

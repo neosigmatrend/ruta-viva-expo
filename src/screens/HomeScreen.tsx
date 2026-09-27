@@ -12,8 +12,8 @@ import { useFocusEffect } from '../lib/useFocusEffect'
 import { sentidoDeRuta, type Ruta } from '../models/types'
 import {
   deleteRutas,
-  finalizarRuta,
   getRutaActiva,
+  limpiarRutasPendientes,
   listRutas,
 } from '../lib/storage'
 import { formatCLP, formatDuration, formatFechaCorta } from '../lib/geo'
@@ -98,11 +98,40 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
     }
   }
 
+  const limpiarPendiente = async (modo: 'descartar' | 'finalizar') => {
+    // UI al toque: la tarjeta no debe quedarse colgada si falla el disco.
+    setActiva(null)
+    try {
+      await limpiarRutasPendientes(modo)
+      const queda = await getRutaActiva()
+      if (queda) {
+        // Segundo intento más agresivo: borrar todas las pendientes.
+        await limpiarRutasPendientes('descartar')
+      }
+      await load()
+      const still = await getRutaActiva()
+      if (still) {
+        setActiva(null)
+        Alert.alert(
+          'No se pudo limpiar',
+          'Probá cerrar Expo Go del todo y volver a abrir. Si sigue, borramos el almacenamiento.',
+        )
+      }
+    } catch (e) {
+      setActiva(null)
+      Alert.alert(
+        'Error',
+        e instanceof Error ? e.message : 'No se pudo limpiar la pendiente',
+      )
+      await load()
+    }
+  }
+
   return (
     <View style={styles.page}>
       <Text style={styles.eyebrow}>Chile · moto · Expo Go</Text>
       <Text style={styles.title}>Ruta viva</Text>
-      <Text style={styles.versionBadge}>VERSIÓN 1.6.2 · pendiente OK</Text>
+      <Text style={styles.versionBadge}>VERSIÓN 1.6.3 · limpiar pendiente</Text>
       <Text style={styles.lede}>Mapa por velocidad, peajes, pausas y costos.</Text>
 
       <Pressable
@@ -111,12 +140,13 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
           if (activa) {
             Alert.alert(
               'Hay una ruta pendiente',
-              'Terminá o descartá la pendiente antes de armar otra.',
+              'Descartala o finalizala antes de armar otra.',
               [
                 { text: 'Cancelar', style: 'cancel' },
                 {
-                  text: 'Ir a pendiente',
-                  onPress: () => onContinuar(activa.id),
+                  text: 'Descartar pendiente',
+                  style: 'destructive',
+                  onPress: () => void limpiarPendiente('descartar'),
                 },
               ],
             )
@@ -133,8 +163,8 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Ruta pendiente</Text>
           <Text style={styles.cardHint}>
-            Sirve para retomar si cerraste la app a mitad de viaje. No es
-            historial: o un viaje que sigue abierto.
+            Viaje abierto (saliste de la app o pausaste). Si no la querés,
+            tocá Descartar y desaparece.
           </Text>
           <View style={styles.rowTop}>
             <Text style={styles.cardTitle} numberOfLines={1}>
@@ -155,36 +185,30 @@ export function HomeScreen({ onNueva, onContinuar, onResumen }: Props) {
             </Pressable>
             <Pressable
               style={styles.btnDescartar}
-              onPress={() => {
+              onPress={() =>
                 Alert.alert(
-                  'Cerrar ruta pendiente',
-                  'Finalizar la guarda en historial. Descartar la borra.',
+                  'Descartar pendiente',
+                  'Se borra y no vuelve a aparecer.',
                   [
                     { text: 'Cancelar', style: 'cancel' },
                     {
-                      text: 'Finalizar',
-                      onPress: () =>
-                        void (async () => {
-                          await finalizarRuta(activa.id)
-                          await load()
-                        })(),
-                    },
-                    {
                       text: 'Descartar',
                       style: 'destructive',
-                      onPress: () =>
-                        void (async () => {
-                          await deleteRutas([activa.id])
-                          await load()
-                        })(),
+                      onPress: () => void limpiarPendiente('descartar'),
                     },
                   ],
                 )
-              }}
+              }
             >
-              <Text style={styles.btnDescartarText}>Cerrar…</Text>
+              <Text style={styles.btnDescartarText}>Descartar</Text>
             </Pressable>
           </View>
+          <Pressable
+            style={styles.linkBtn}
+            onPress={() => void limpiarPendiente('finalizar')}
+          >
+            <Text style={styles.link}>Finalizar y guardar en historial</Text>
+          </Pressable>
         </View>
       )}
 
@@ -390,6 +414,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnDescartarText: { color: colors.muted, fontWeight: '600' },
+  linkBtn: { marginTop: 10, alignItems: 'center' },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
