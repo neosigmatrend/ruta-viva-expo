@@ -14,6 +14,7 @@ import {
 import MapView, { Marker, Polyline } from 'react-native-maps'
 import * as Location from 'expo-location'
 import * as ImagePicker from 'expo-image-picker'
+import * as DocumentPicker from 'expo-document-picker'
 import { useKeepAwake } from 'expo-keep-awake'
 import { PEAJES_DEMO } from '../data/peajes-demo'
 import { distanciaMetros, formatCLP, formatDuration, newId } from '../lib/geo'
@@ -407,13 +408,16 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     setOcrStatus('idle')
   }
 
-  const correrOcr = async (uri: string) => {
+  const correrOcr = async (
+    uri: string,
+    meta?: { mimeType?: string | null; fileName?: string | null },
+  ) => {
     const gen = ++ocrGen.current
     setOcrStatus('loading')
     setOcrCandidatos([])
     setMonto('') // nunca reutilizar monto de la foto anterior
     try {
-      const { sugerido, candidatos } = await detectarMontoDesdeUri(uri)
+      const { sugerido, candidatos } = await detectarMontoDesdeUri(uri, meta)
       if (gen !== ocrGen.current) return // llegó tarde otra foto
       setOcrCandidatos(candidatos)
       if (sugerido != null) {
@@ -428,30 +432,36 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
         setOcrStatus('fail')
         Alert.alert(
           'Sin monto',
-          'No encontré el total. Probá boleta, voucher o ticket más nítido, o escribí el monto a mano.',
+          'No encontré el total. Probá otra foto más nítida o escribí el monto a mano.',
         )
       }
     } catch (e) {
       if (gen !== ocrGen.current) return
       setOcrStatus('fail')
       const msg = e instanceof Error ? e.message : 'Error de red/OCR'
+      const amable = msg.includes('FORMATO_NO_SOPORTADO')
+        ? 'Ese archivo venía en un formato que el lector no acepta (a veces HEIC). Probá “Elegir de galería” de nuevo o sacá una foto JPG con la cámara.'
+        : msg
       Alert.alert(
         'No se pudo leer',
-        `${msg}\n\nSirve boleta, factura, voucher o ticket. Si falla, escribí el monto a mano.`,
+        `${amable}\n\nTambién podés escribir el monto a mano.`,
       )
     }
   }
 
-  const aplicarImagen = (uri: string) => {
+  const aplicarImagen = (
+    uri: string,
+    meta?: { mimeType?: string | null; fileName?: string | null },
+  ) => {
     // Limpiar sugerencia anterior ANTES de leer la nueva
     setMonto('')
     setOcrCandidatos([])
     setOcrStatus('loading')
     setFotoUri(uri)
-    void correrOcr(uri)
+    void correrOcr(uri, meta)
   }
 
-  /** Preferido: comprobante ya en Fotos / Archivos (cualquier tipo). */
+  /** Fotos del carrete (HEIC se convierte a JPG al leer). */
   const elegirDeGaleria = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
@@ -462,11 +472,28 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
       mediaTypes: ['images'],
       quality: 0.85,
       allowsEditing: false,
-      // en iOS permite también archivos recientes / carpeta Fotos
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     })
     if (!res.canceled && res.assets[0]) {
-      aplicarImagen(res.assets[0].uri)
+      const a = res.assets[0]
+      aplicarImagen(a.uri, {
+        mimeType: a.mimeType ?? 'image/jpeg',
+        fileName: a.fileName ?? 'comprobante.jpg',
+      })
     }
+  }
+
+  /** Archivos: JPG/PNG/PDF desde Archivos / carpetas. */
+  const elegirArchivo = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['image/*', 'application/pdf'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    })
+    if (res.canceled || !res.assets?.[0]) return
+    const a = res.assets[0]
+    aplicarImagen(a.uri, { mimeType: a.mimeType, fileName: a.name })
   }
 
   const tomarConCamara = async () => {
@@ -478,9 +505,15 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
     const res = await ImagePicker.launchCameraAsync({
       quality: 0.7,
       allowsEditing: false,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     })
     if (!res.canceled && res.assets[0]) {
-      aplicarImagen(res.assets[0].uri)
+      const a = res.assets[0]
+      aplicarImagen(a.uri, {
+        mimeType: a.mimeType ?? 'image/jpeg',
+        fileName: a.fileName ?? 'foto.jpg',
+      })
     }
   }
 
@@ -727,7 +760,7 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
           <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={styles.title}>Agregar gasto</Text>
             <Text style={styles.muted}>
-              Boleta, factura, voucher o ticket · mejor desde galería · confirmá el monto
+              Boleta, factura, voucher o ticket · JPG/PNG/PDF · confirmá el monto
             </Text>
             <Pressable
               style={styles.btnPrimary}
@@ -737,8 +770,15 @@ export function RutaActivaScreen({ rutaId, onFinalizada, onHome }: Props) {
               <Text style={styles.btnPrimaryText}>
                 {ocrStatus === 'loading'
                   ? 'Leyendo comprobante…'
-                  : 'Elegir de galería / carpeta'}
+                  : 'Elegir de galería (Fotos)'}
               </Text>
+            </Pressable>
+            <Pressable
+              style={styles.btnGhost}
+              onPress={() => void elegirArchivo()}
+              disabled={ocrStatus === 'loading'}
+            >
+              <Text style={styles.ghostText}>Elegir archivo (JPG / PNG / PDF)</Text>
             </Pressable>
             <Pressable
               style={styles.btnGhost}

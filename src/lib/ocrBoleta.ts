@@ -1,4 +1,5 @@
 import * as ImageManipulator from 'expo-image-manipulator'
+import * as FileSystem from 'expo-file-system/legacy'
 import { Platform } from 'react-native'
 
 /** Extrae candidatos de monto CLP desde texto OCR. */
@@ -6,7 +7,6 @@ export function parseMontosCLP(texto: string): number[] {
   const encontrados = new Set<number>()
   const upper = texto.toUpperCase().replace(/[|]/g, 'I')
 
-  // Cualquier comprobante: boleta, factura, voucher, ticket, recibo…
   const patterns = [
     /(?:TOTAL\s*A\s*PAGAR|TOTAL\s*PAGADO|TOTAL|SUB[\s-]?TOTAL|NETO|IVA|MONTO|PAGO|VALOR|IMPORTE|PAGADO)\s*[:$]?\s*\$?\s*([\d.]+(?:,\d{1,2})?)/g,
     /\$\s*([\d.]+(?:,\d{1,2})?)/g,
@@ -29,11 +29,6 @@ export function parseMontosCLP(texto: string): number[] {
   return [...encontrados].sort((a, b) => b - a)
 }
 
-/**
- * Prioriza el total a pagar en cualquier documento tributario/comercial
- * (boleta, factura, voucher, ticket…). En facturas el bloque final suele ser:
- * TOTAL / IVA / 277.312 ← monto a pagar
- */
 export function preferirTotal(
   texto: string,
   candidatos: number[],
@@ -81,24 +76,56 @@ function normalizarMonto(raw: string): number | null {
   return Math.round(n)
 }
 
-/**
- * OCR.space con archivo JPEG (base64 falla con 400 en esta API).
- * Requiere internet.
- */
-export async function detectarMontoDesdeUri(
+function ensureFileUri(uri: string): string {
+  if (Platform.OS === 'ios' && !uri.startsWith('file://') && !uri.startsWith('content://')) {
+    return `file://${uri}`
+  }
+  return uri
+}
+
+function looksPdf(uri: string, mime?: string | null, name?: string | null): boolean {
+  const u = `${uri} ${mime ?? ''} ${name ?? ''}`.toLowerCase()
+  return u.includes('.pdf') || u.includes('application/pdf')
+}
+
+type Upload = { uri: string; name: string; type: string }
+
+/** Convierte HEIC/PNG/etc. a JPEG (OCR.space no acepta HEIC). */
+async function prepararUpload(
   uri: string,
-): Promise<{ sugerido: number | null; candidatos: number[]; texto: string }> {
-  const compressed = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: 1400 } }],
-    { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG },
-  )
+  mime?: string | null,
+  name?: string | null,
+): Promise<Upload> {
+  if (looksPdf(uri, mime, name)) {
+    return {
+      uri: ensureFileUri(uri),
+      name: name?.toLowerCase().endsWith('.pdf') ? name : 'comprobante.pdf',
+      type: 'application/pdf',
+    }
+  }
 
-  const fileUri =
-    Platform.OS === 'ios' && !compressed.uri.startsWith('file://')
-      ? `file://${compressed.uri}`
-      : compressed.uri
+  try {
+    const compressed = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1400 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+    )
+    return {
+      uri: ensureFileUri(compressed.uri),
+      name: 'comprobante.jpg',
+      type: 'image/jpeg',
+    }
+  } catch {
+    // Si no se puede manipular, intentar igual como jpeg
+    return {
+      uri: ensureFileUri(uri),
+      name: 'comprobante.jpg',
+      type: 'image/jpeg',
+    }
+  }
+}
 
+async function ocrConArchivo(upload: Upload) {
   const form = new FormData()
   form.append('apikey', 'helloworld')
   form.append('language', 'spa')
@@ -107,22 +134,74 @@ export async function detectarMontoDesdeUri(
   form.append('scale', 'true')
   form.append('detectOrientation', 'true')
   form.append('file', {
-    uri: fileUri,
-    name: 'boleta.jpg',
-    type: 'image/jpeg',
+    uri: upload.uri,
+    name: upload.name,
+    type: upload.type,
   } as unknown as Blob)
 
   const res = await fetch('https://api.ocr.space/parse/image', {
     method: 'POST',
     body: form,
   })
+  return parseOcrResponse(res)
+}
 
+/** Fallback: JPEG pequeño en base64 (evita “File type not supported” de HEIC). */
+async function ocrConBase64Jpeg(uri: string) {
+  const compressed = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: 1200 } }],
+    {
+      compress: 0.65,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    },
+  )
+  let b64 = compressed.base64
+  if (!b64) {
+    b64 = await FileSystem.readAsStringAsync(compressed.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+  }
+  // Limitar tamaño: API free falla con base64 muy grande
+  if (b64.length > 900_000) {
+    const smaller = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 900 } }],
+      {
+        compress: 0.55,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      },
+    )
+    b64 =
+      smaller.base64 ??
+      (await FileSystem.readAsStringAsync(smaller.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      }))
+  }
+
+  const form = new FormData()
+  form.append('apikey', 'helloworld')
+  form.append('language', 'spa')
+  form.append('isOverlayRequired', 'false')
+  form.append('OCREngine', '2')
+  form.append('scale', 'true')
+  form.append('base64Image', `data:image/jpeg;base64,${b64}`)
+
+  const res = await fetch('https://api.ocr.space/parse/image', {
+    method: 'POST',
+    body: form,
+  })
+  return parseOcrResponse(res)
+}
+
+async function parseOcrResponse(res: Response) {
   const rawText = await res.text()
   let json: {
     IsErroredOnProcessing?: boolean
     ErrorMessage?: string | string[]
     ParsedResults?: { ParsedText?: string }[]
-    OCRExitCode?: number
   }
   try {
     json = JSON.parse(rawText)
@@ -134,13 +213,19 @@ export async function detectarMontoDesdeUri(
     const msg = Array.isArray(json.ErrorMessage)
       ? json.ErrorMessage.join(' ')
       : json.ErrorMessage ?? `HTTP ${res.status}`
+    const lower = String(msg).toLowerCase()
+    if (lower.includes('not supported') || lower.includes('file type')) {
+      throw new Error(
+        'FORMATO_NO_SOPORTADO: convertí a JPG/PNG o usá una foto de la cámara/galería (no HEIC/PDF raro).',
+      )
+    }
     throw new Error(String(msg))
   }
 
   const texto =
     json.ParsedResults?.map((p) => p.ParsedText ?? '').join('\n') ?? ''
   if (!texto.trim()) {
-    throw new Error('La boleta no devolvió texto legible')
+    throw new Error('El comprobante no devolvió texto legible')
   }
 
   const candidatos = parseMontosCLP(texto)
@@ -149,5 +234,32 @@ export async function detectarMontoDesdeUri(
     sugerido,
     candidatos: candidatos.slice(0, 6),
     texto,
+  }
+}
+
+/**
+ * OCR de comprobante (boleta/factura/voucher/ticket).
+ * Fuerza JPEG cuando es imagen (HEIC del iPhone → JPG).
+ */
+export async function detectarMontoDesdeUri(
+  uri: string,
+  opts?: { mimeType?: string | null; fileName?: string | null },
+): Promise<{ sugerido: number | null; candidatos: number[]; texto: string }> {
+  const upload = await prepararUpload(uri, opts?.mimeType, opts?.fileName)
+
+  try {
+    return await ocrConArchivo(upload)
+  } catch (e1) {
+    const msg = e1 instanceof Error ? e1.message : ''
+    // Reintentar como JPEG base64 si era imagen
+    if (!looksPdf(uri, opts?.mimeType, opts?.fileName)) {
+      try {
+        return await ocrConBase64Jpeg(uri)
+      } catch (e2) {
+        const m2 = e2 instanceof Error ? e2.message : String(e2)
+        throw new Error(m2 || msg || 'No se pudo leer el comprobante')
+      }
+    }
+    throw e1 instanceof Error ? e1 : new Error(String(e1))
   }
 }
