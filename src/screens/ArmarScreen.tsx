@@ -332,7 +332,8 @@ export function ArmarScreen({ onCancel, onIniciada }: Props) {
           latitudeDelta: 0.25,
           longitudeDelta: 0.25,
         }}
-        onPress={onMapPress}
+        onDoublePress={onMapDoublePress}
+        zoomTapEnabled={false}
         moveOnMarkerPress={false}
       >
         {opciones.map((op, i) => (
